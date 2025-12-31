@@ -68,10 +68,13 @@ router.delete('/:id', requireAuth(['admin']), (req, res) => {
   }
 });
 
-router.get('/:id/orders', (req, res) => {
+router.get('/:id/orders', requireAuth(['admin', 'vendor']), (req, res) => {
   try {
     const db = req.app.locals.db;
     const vendorId = req.params.id;
+    if (req.user?.role === 'vendor' && req.user.vendorId !== vendorId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     const rows = db.all(
       `SELECT oi.*, 
               o.customer_email, o.customer_phone, o.shipping_address, o.created_at,

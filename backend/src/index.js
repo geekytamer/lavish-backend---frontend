@@ -42,6 +42,47 @@ async function start() {
   app.use('/api/content', contentRoutes);
   app.use('/api/upload', uploadRoutes);
 
+  // Open vendor deep link (share URL)
+  app.get('/open/vendor/:id', (req, res) => {
+    const vendorId = req.params.id;
+    const deepLink = `lavish://vendor/${encodeURIComponent(vendorId)}`;
+    const androidStore = config.appStoreAndroidUrl;
+    const iosStore = config.appStoreIosUrl;
+
+    res.set('Content-Type', 'text/html');
+    res.send(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Opening store</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; line-height: 1.5; }
+            a { color: #7c3aed; }
+          </style>
+          <script>
+            (function() {
+              var deepLink = ${JSON.stringify(deepLink)};
+              var androidStore = ${JSON.stringify(androidStore)};
+              var iosStore = ${JSON.stringify(iosStore)};
+              var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+              window.location.href = deepLink;
+              setTimeout(function() {
+                var target = isIOS ? iosStore : androidStore;
+                if (target) window.location.href = target;
+              }, 1200);
+            })();
+          </script>
+        </head>
+        <body>
+          <p>Opening vendor…</p>
+          <p><a href="${deepLink}">Tap here if not redirected</a></p>
+        </body>
+      </html>
+    `);
+  });
+
   // Simple landing/fallback so deep link redirects have a page to land on
   app.get('/', (req, res) => {
     const { status, order_id: orderId, session_id: sessionId } = req.query || {};

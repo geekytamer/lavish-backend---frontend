@@ -17,6 +17,7 @@ pnpm-debug.log*
 .env
 .env.*
 backend/.env
+!backend/.env.example
 dashboard/.env
 
 # Generated data/uploads

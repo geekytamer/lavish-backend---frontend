@@ -4,6 +4,10 @@ const https = require('https');
 
 const router = express.Router();
 
+function buildThawaniUrl(path) {
+  return `https://uatcheckout.thawani.om${path}`;
+}
+
 function updateOrderStatus(db, orderId, paymentStatus, orderStatus, sessionId) {
   if (!db) return;
   try {
@@ -64,6 +68,80 @@ router.get('/thawani/return/cancel', (req, res) => {
   if (!db) console.warn('Missing db on cancel return');
   updateOrderStatus(db, orderId, 'cancelled', 'cancelled', sessionId);
   redirectToApp(res, orderId, 'cancelled', sessionId);
+});
+
+router.post('/thawani/session', (req, res) => {
+  const { orderId, customerReference } = req.body || {};
+  if (!orderId) return res.status(400).json({ error: 'orderId required' });
+  const db = req.app?.locals?.db;
+  if (!db) return res.status(500).json({ error: 'Database unavailable' });
+
+  const order = db.get('SELECT id, total, shipping_address, customer_email, customer_phone FROM orders WHERE id = ?', [
+    orderId,
+  ]);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  const total = Number(order.total || 0);
+  if (!Number.isFinite(total) || total <= 0) {
+    return res.status(400).json({ error: 'Order total invalid' });
+  }
+
+  const baseUrl = (config.publicUrl || '').replace(/\/$/, '') || 'http://localhost:4000';
+  const successUrl = `${baseUrl}/api/payments/thawani/return/success?order_id=${encodeURIComponent(orderId)}`;
+  const cancelUrl = `${baseUrl}/api/payments/thawani/return/cancel?order_id=${encodeURIComponent(orderId)}`;
+  const payload = JSON.stringify({
+    client_reference_id: orderId,
+    mode: 'payment',
+    products: [
+      {
+        name: 'Lavish Fashion order',
+        quantity: 1,
+        unit_amount: Math.max(1, Math.round(total * 1000)),
+      },
+    ],
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    metadata: {
+      customerRef: customerReference || order.shipping_address || order.customer_email || order.customer_phone,
+    },
+  });
+
+  const options = {
+    method: 'POST',
+    hostname: 'uatcheckout.thawani.om',
+    path: '/api/v1/checkout/session',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+      'Thawani-Api-Key': config.thawaniSecret,
+    },
+  };
+
+  const request = https.request(options, (response) => {
+    let data = '';
+    response.on('data', (chunk) => (data += chunk));
+    response.on('end', () => {
+      try {
+        if (response.statusCode >= 400) {
+          return res
+            .status(502)
+            .json({ error: 'Thawani session creation failed', status: response.statusCode, body: data });
+        }
+        const parsed = JSON.parse(data);
+        const sessionId = parsed?.data?.session_id || '';
+        const paymentUrl = sessionId
+          ? `${buildThawaniUrl(`/pay/${sessionId}?key=${config.thawaniPublishable}`)}`
+          : '';
+        return res.json({ sessionId, paymentUrl });
+      } catch (err) {
+        return res.status(500).json({ error: err.message || 'Failed to parse Thawani response' });
+      }
+    });
+  });
+
+  request.on('error', (err) => res.status(500).json({ error: err.message || 'Thawani request failed' }));
+  request.write(payload);
+  request.end();
 });
 
 // Optional status check (still available)

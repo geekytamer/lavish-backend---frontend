@@ -53,6 +53,7 @@ export function OrdersPage() {
             <span>Order</span>
             <span>Customer</span>
             <span>Contact</span>
+            <span>Address</span>
             <span>Total</span>
             <span>Status</span>
             <span>Payment</span>
@@ -62,11 +63,13 @@ export function OrdersPage() {
             const subtotal = order.subtotal || order.total || 0;
             const customer = order.customer_email || '—';
             const contact = order.customer_phone || '—';
+            const address = order.shipping_address || order.shippingAddress || '—';
             return (
               <div key={order.id} className="table-row">
                 <span className="mono">{order.id.slice(0, 8)}</span>
                 <span>{customer}</span>
                 <span>{contact}</span>
+                <span className="muted">{address}</span>
                 <span>{formatCurrency(subtotal)}</span>
                 <span className="inline">
                   <StatusPill value={order.status} />
