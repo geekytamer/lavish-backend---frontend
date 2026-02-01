@@ -3,7 +3,14 @@ require('dotenv').config();
 const config = {
   port: process.env.PORT || 4000,
   corsOrigin: process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+    ? [
+      ...process.env.CORS_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean),
+      "https://lavishlook.app",
+      "https://www.lavishlook.app",
+      "https://dashboard.lavishlook.app",
+      "https://admin.lavishlook.app",
+      "https://api.lavishlook.app"
+    ]
     : "*",
   thawaniSecret: process.env.THAWANI_SECRET_KEY || "thawani_secret_key",
   thawaniPublishable:
