@@ -1,16 +1,68 @@
 import { useParams, Navigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Edit, Camera, Save, X } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { formatCurrency, formatDateTime, weeklyBuckets } from '../lib/formatters.js';
 import { StatusPill } from '../components/StatusPill.jsx';
 import { StatCard } from '../components/StatCard.jsx';
 import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
+import { Modal } from '../components/Modal.jsx';
+
+const VENDOR_CATEGORIES = [
+  'Womenswear',
+  'Menswear',
+  'Streetwear',
+  'Accessories',
+  'Evening',
+  'Athleisure',
+  'Denim',
+  'Footwear',
+  'Luxury',
+];
 
 export function VendorProfilePage() {
   const { id: routeId } = useParams();
+  // ...
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', description: '', tags: [], logo_url: '' });
+  const [pendingLogo, setPendingLogo] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
+
+  const startEdit = () => {
+    setEditForm({
+      name: data.vendor.name || '',
+      description: data.vendor.description || '',
+      tags: data.vendor.tags || [],
+      logo_url: data.vendor.logo_url || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const updateVendor = useMutation({
+    mutationFn: async (payload) => {
+      let logoUrl = payload.logo_url;
+      if (pendingLogo) {
+        const res = await api.upload('/upload', pendingLogo);
+        logoUrl = res.file?.url || res.file?.path;
+      }
+      return api.patch(`/vendors/${resolvedId}`, { ...payload, logo_url: logoUrl });
+    },
+    onSuccess: () => {
+      setShowEditModal(false);
+      setPendingLogo(null);
+      setLogoPreview(null);
+      qc.invalidateQueries({ queryKey: ['vendor-profile', api.base, resolvedId] });
+    },
+  });
+
+  const toggleTag = (tag) => {
+    setEditForm((prev) => ({
+      ...prev,
+      tags: prev.tags.includes(tag) ? prev.tags.filter((t) => t !== tag) : [...prev.tags, tag],
+    }));
+  };
   const { role, vendorId } = useApp();
   const resolvedId = routeId || vendorId;
   if (!resolvedId) return <Navigate to="/login" replace />;
@@ -41,32 +93,120 @@ export function VendorProfilePage() {
 
   return (
     <div className="stack gap-lg">
-      <div className="card">
-        <div className="card-head">
-          <div className="inline gap-sm">
-            {role === 'vendor' ? null : (
-              <Link className="btn ghost small" to="/vendors">
-                <ArrowLeft size={14} />
-                Back
-              </Link>
-            )}
-            <div>
-              <p className="eyebrow">Vendor</p>
-              <h3>{data.vendor.name || resolvedId}</h3>
-              <p className="muted">{data.vendor.description}</p>
+      <div className="card vendor-hero">
+        <div className="grid two gap-xl align-center">
+          <div>
+            <div className="inline between">
+              <p className="eyebrow">Partner Entity</p>
+              {role === 'vendor' && (
+                <button className="btn ghost small" onClick={startEdit}>
+                  <Edit size={14} /> Edit Brand
+                </button>
+              )}
+            </div>
+            <div className="inline gap-lg align-center mt-sm">
+              <div className="avatar large" style={{ width: '80px', height: '80px', fontSize: '24px' }}>
+                {data.vendor.logo_url ? <img src={data.vendor.logo_url} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} /> : (data.vendor.name || resolvedId)[0]}
+              </div>
+              <div>
+                <h1 className="display" style={{ fontSize: '32px' }}>{data.vendor.name || resolvedId}</h1>
+                <div className="inline gap-md mt-xs">
+                  <div className="pill info">{data.vendor.rating ? `${data.vendor.rating.toFixed(1)} ★ Rating` : 'New Partner'}</div>
+                  <div className="pill success">Active Status</div>
+                </div>
+              </div>
+            </div>
+            <p className="description mt-md">{data.vendor.description || 'No description provided.'}</p>
+            <div className="flex-wrap mt-md" style={{ display: 'flex', gap: '6px' }}>
+              {(data.vendor.tags || []).map(t => <span key={t} className="pill subtle mono xs">{t}</span>)}
             </div>
           </div>
-          <div className="inline">
-            <div className="pill subtle mono">{resolvedId}</div>
-            <div className="pill info">{data.vendor.rating ? `${data.vendor.rating.toFixed(1)}★` : 'Unrated'}</div>
+          <div className="grid cards-3 gap-md">
+            <StatCard label="Orders" value={data.stats.orders || 0} hint="Total transactions" />
+            <StatCard label="Revenue" value={formatCurrency(data.stats.revenue || 0)} hint="Gross sales" />
+            <StatCard label="Balance Due" value={formatCurrency(data.stats.balance || 0)} hint="Unpaid amount" highlight={Number(data.stats.balance) > 0} />
+            <StatCard label="Items Sold" value={data.stats.itemsSold || 0} hint="Total units" />
+            <StatCard label="Avg. Order" value={formatCurrency(data.stats.aov || 0)} hint="Per receipt" />
+            <StatCard label="Paid Out" value={formatCurrency(data.stats.totalPaid || 0)} hint="Completed payouts" />
           </div>
         </div>
-        <div className="grid cards-3">
-          <StatCard label="Orders" value={data.stats.orders || 0} hint="Across all time" />
-          <StatCard label="Receipts" value={formatCurrency(data.stats.revenue || 0)} hint="Gross subtotal" />
-          <StatCard label="Products" value={data.products.length} hint="Active SKUs" />
-        </div>
       </div>
+
+      <Modal
+        open={showEditModal}
+        title="Edit Brand Profile"
+        onClose={() => setShowEditModal(false)}
+        footer={
+          <>
+            <button className="btn ghost" onClick={() => setShowEditModal(false)}>Cancel</button>
+            <button className="btn primary" onClick={() => updateVendor.mutate(editForm)} disabled={updateVendor.isPending}>
+              <Save size={14} /> {updateVendor.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </>
+        }
+      >
+        <div className="stack gap-md">
+          <label className="label">
+            Store Logo
+            <div className="inline gap-md">
+              <button className="upload-btn" onClick={() => document.getElementById('vendor-logo-file').click()}>
+                <Camera size={14} /> Change Logo
+              </button>
+              {(logoPreview || editForm.logo_url) && (
+                <img src={logoPreview || editForm.logo_url} className="avatar" style={{ width: '60px', height: '60px' }} />
+              )}
+              <input
+                id="vendor-logo-file"
+                type="file"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    setPendingLogo(file);
+                    setLogoPreview(URL.createObjectURL(file));
+                  }
+                }}
+              />
+            </div>
+          </label>
+          <label className="label">
+            Display Name
+            <input
+              className="input"
+              value={editForm.name}
+              onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+            />
+          </label>
+          <label className="label">
+            Bio / Description
+            <textarea
+              className="input"
+              rows={3}
+              value={editForm.description}
+              onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+            />
+          </label>
+          <label className="label">
+            Brand Categorization
+            <div className="flex-wrap mt-xs" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {VENDOR_CATEGORIES.map((tag) => {
+                const active = editForm.tags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    className={`pill ${active ? 'primary' : 'subtle'} clickable`}
+                    onClick={() => toggleTag(tag)}
+                    style={{ border: 'none' }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </label>
+        </div>
+      </Modal>
 
       <div className="grid two">
         <div className="card">

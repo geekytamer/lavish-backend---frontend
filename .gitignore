@@ -19,6 +19,7 @@ pnpm-debug.log*
 backend/.env
 !backend/.env.example
 dashboard/.env
+!dashboard/.env.example
 
 # Generated data/uploads
 backend/data.sqlite

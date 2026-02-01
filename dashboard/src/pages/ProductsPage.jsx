@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
-import { Trash2, Plus, Images, Edit } from 'lucide-react';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { Trash2, Plus, Images, Edit, Search } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatCurrency } from '../lib/formatters.js';
 import { validateImage } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
+import { StatCard } from '../components/StatCard.jsx';
 
 export function ProductsPage() {
   const api = useApiClient();
@@ -22,11 +23,13 @@ export function ProductsPage() {
     gallery: [],
     sizes: '',
     colors: '',
+    stockQuantity: '',
   });
   const [pendingFiles, setPendingFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     return () => previewUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -63,6 +66,7 @@ export function ProductsPage() {
         name: form.name,
         description: form.description,
         price: Number(form.price),
+        stockQuantity: Number(form.stockQuantity),
         imageUrl: form.imageUrl || uploadedUrls[0] || '',
         gallery: [...form.gallery, ...uploadedUrls],
         sizes: form.sizes ? form.sizes.split(',').map((s) => s.trim()).filter(Boolean) : [],
@@ -117,6 +121,7 @@ export function ProductsPage() {
       gallery: product.gallery || [],
       sizes: (product.sizes || []).join(','),
       colors: (product.colors || []).join(','),
+      stockQuantity: product.stock_quantity || 0,
     });
     setPendingFiles([]);
     setPreviewUrls(product.gallery || []);
@@ -136,6 +141,7 @@ export function ProductsPage() {
       gallery: [],
       sizes: '',
       colors: '',
+      stockQuantity: '',
     });
     setPendingFiles([]);
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -143,18 +149,48 @@ export function ProductsPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
     setShowModal(false);
   };
+  const insights = useMemo(() => {
+    const list = products.data || [];
+    const lowStock = list.filter(p => (p.stock_quantity || 0) > 0 && (p.stock_quantity || 0) < 5).length;
+    const outOfStock = list.filter(p => (p.stock_quantity || 0) === 0).length;
+    const totalValue = list.reduce((sum, p) => sum + (Number(p.price || 0) * (p.stock_quantity || 0)), 0);
+    return { count: list.length, lowStock, outOfStock, totalValue };
+  }, [products.data]);
+
+  const filteredProducts = (products.data || []).filter((p) =>
+    p.name?.toLowerCase().includes(search.toLowerCase()) ||
+    p.id?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="stack gap-lg">
+      <div className="grid cards-4 gap-md">
+        <StatCard label="Active SKUs" value={insights.count} hint="Catalog size" />
+        <StatCard label="Low Stock" value={insights.lowStock} hint="Needs refill soon" highlight={insights.lowStock > 0} tone="amber" />
+        <StatCard label="Out of Stock" value={insights.outOfStock} hint="Immediate action" highlight={insights.outOfStock > 0} tone="danger" />
+        <StatCard label="Inv. Value" value={formatCurrency(insights.totalValue)} hint="Gross stock price" />
+      </div>
+
       <div className="card">
         <div className="card-head">
           <div>
             <p className="eyebrow">Products</p>
             <h3>Catalog</h3>
           </div>
-          <button className="btn primary small" onClick={startNew}>
-            <Plus size={14} /> New
-          </button>
+          <div className="inline gap-md">
+            <div className="search-box">
+              <Search size={16} className="muted" />
+              <input
+                className="search-input"
+                placeholder="Search products..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <button className="btn primary small" onClick={startNew}>
+              <Plus size={14} /> New
+            </button>
+          </div>
         </div>
         <div className="table">
           <div className="table-head">
@@ -162,13 +198,14 @@ export function ProductsPage() {
             <span>Vendor</span>
             <span>Category</span>
             <span>Price</span>
+            <span>Stock</span>
             <span>Gallery</span>
             <span>Sizes</span>
             <span>Colors</span>
             <span />
             <span />
           </div>
-          {(products.data || []).map((product) => (
+          {filteredProducts.map((product) => (
             <div key={product.id} className="table-row">
               <span>
                 <div className="mono pill subtle">{product.id}</div>
@@ -177,6 +214,15 @@ export function ProductsPage() {
               <span>{product.vendor_id || product.vendorId}</span>
               <span>{product.category_id || product.categoryId || '—'}</span>
               <span>{formatCurrency(product.price)}</span>
+              <span>
+                {product.stock_quantity === 0 ? (
+                  <span className="pill danger">Out of stock</span>
+                ) : product.stock_quantity < 5 ? (
+                  <span className="pill amber">Low: {product.stock_quantity}</span>
+                ) : (
+                  <span className="pill success">{product.stock_quantity} in stock</span>
+                )}
+              </span>
               <span className="tags">
                 {(product.gallery || []).slice(0, 3).map((url) => (
                   <img key={url} src={url} alt="" className="thumb" />
@@ -289,6 +335,17 @@ export function ProductsPage() {
             required
             value={form.price}
             onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+          />
+        </label>
+        <label className="label">
+          Stock Quantity
+          <input
+            className="input"
+            type="number"
+            min="0"
+            required
+            value={form.stockQuantity}
+            onChange={(e) => setForm((f) => ({ ...f, stockQuantity: e.target.value }))}
           />
         </label>
         <label className="label">

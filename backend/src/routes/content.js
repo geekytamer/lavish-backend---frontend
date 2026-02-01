@@ -109,7 +109,39 @@ router.get('/home', (req, res) => {
   const promos = db.all('SELECT * FROM promos WHERE active = 1 ORDER BY sort_order');
   const categories = db.all('SELECT * FROM categories ORDER BY sort_order');
   const featured = db.all('SELECT * FROM featured_blocks WHERE active = 1 ORDER BY sort_order').map((b) => ({ ...b, items: b.items ? JSON.parse(b.items) : [] }));
-  res.json({ promos, categories, featured });
+  const vendorTags = db.all('SELECT * FROM vendor_tags ORDER BY sort_order');
+  res.json({ promos, categories, featured, vendorTags });
+});
+
+// vendor tags
+router.get('/vendor-tags', (req, res) => {
+  const db = req.app.locals.db;
+  const rows = db.all('SELECT * FROM vendor_tags ORDER BY sort_order');
+  res.json({ tags: rows });
+});
+
+router.post('/vendor-tags', requireAuth(['admin']), (req, res) => {
+  const { name, sortOrder = 0 } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Name required' });
+  const db = req.app.locals.db;
+  db.run('INSERT INTO vendor_tags (id, name, sort_order) VALUES (?, ?, ?)', [uuid(), name, sortOrder]);
+  res.status(201).json({ ok: true });
+});
+
+router.patch('/vendor-tags/:id', requireAuth(['admin']), (req, res) => {
+  const { name, sortOrder } = req.body || {};
+  const db = req.app.locals.db;
+  db.run(
+    'UPDATE vendor_tags SET name = COALESCE(?, name), sort_order = COALESCE(?, sort_order) WHERE id = ?',
+    [name, sortOrder, req.params.id],
+  );
+  res.json({ ok: true });
+});
+
+router.delete('/vendor-tags/:id', requireAuth(['admin']), (req, res) => {
+  const db = req.app.locals.db;
+  db.run('DELETE FROM vendor_tags WHERE id = ?', [req.params.id]);
+  res.json({ ok: true });
 });
 
 module.exports = router;

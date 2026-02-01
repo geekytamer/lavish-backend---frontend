@@ -12,140 +12,147 @@ export function ContentPage() {
     queryKey: ['content', api.base],
     queryFn: () => api.get('/content/home'),
   });
-  const [categoryForm, setCategoryForm] = useState({ name: '', imageUrl: '', sortOrder: 0 });
-  const [promoForm, setPromoForm] = useState({
-    title: '',
-    subtitle: '',
-    imageUrl: '',
-    cta: '',
-    link: '',
-    sortOrder: 0,
-  });
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [showPromoModal, setShowPromoModal] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [editingPromo, setEditingPromo] = useState(null);
+  const [tagForm, setTagForm] = useState({ name: '', sortOrder: 0 });
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [editingTag, setEditingTag] = useState(null);
 
-  const createCategory = useMutation({
+  const createTag = useMutation({
     mutationFn: () =>
-      editingCategory
-        ? api.patch(`/content/categories/${editingCategory.id}`, categoryForm)
-        : api.post('/content/categories', categoryForm),
+      editingTag
+        ? api.patch(`/content/vendor-tags/${editingTag.id}`, tagForm)
+        : api.post('/content/vendor-tags', tagForm),
     onSuccess: () => {
-      setCategoryForm({ name: '', imageUrl: '', sortOrder: 0 });
-      setEditingCategory(null);
-      setShowCategoryModal(false);
+      setTagForm({ name: '', sortOrder: 0 });
+      setEditingTag(null);
+      setShowTagModal(false);
       qc.invalidateQueries({ queryKey: ['content', api.base] });
     },
   });
 
-  const createPromo = useMutation({
-    mutationFn: () =>
-      editingPromo ? api.patch(`/content/promos/${editingPromo.id}`, promoForm) : api.post('/content/promos', promoForm),
-    onSuccess: () => {
-      setPromoForm({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0 });
-      setEditingPromo(null);
-      setShowPromoModal(false);
-      qc.invalidateQueries({ queryKey: ['content', api.base] });
-    },
+  const deleteTag = useMutation({
+    mutationFn: (id) => api.del(`/content/vendor-tags/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['content', api.base] }),
   });
 
-  const uploadCategoryImage = useMutation({
-    mutationFn: async (file) => {
-      await validateImage(file);
-      const res = await api.upload('/upload', file);
-      return res.file?.url || res.file?.path;
-    },
-    onSuccess: (url) => setCategoryForm((f) => ({ ...f, imageUrl: url || f.imageUrl })),
-  });
-
-  const uploadPromoImage = useMutation({
-    mutationFn: async (file) => {
-      await validateImage(file);
-      const res = await api.upload('/upload', file);
-      return res.file?.url || res.file?.path;
-    },
-    onSuccess: (url) => setPromoForm((f) => ({ ...f, imageUrl: url || f.imageUrl })),
-  });
-
-  const handleCategoryImage = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    uploadCategoryImage.mutate(file);
+  const handleDeleteTag = (id) => {
+    if (window.confirm('Delete this tag?')) deleteTag.mutate(id);
   };
 
-  const handlePromoImage = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    uploadPromoImage.mutate(file);
-  };
-
-  const handleCategorySubmit = (e) => {
+  const handleTagSubmit = (e) => {
     e.preventDefault();
-    createCategory.mutate();
-  };
-
-  const handlePromoSubmit = (e) => {
-    e.preventDefault();
-    createPromo.mutate();
+    createTag.mutate();
   };
 
   const promos = content.data?.promos || [];
   const categories = content.data?.categories || [];
+  const vendorTags = content.data?.vendorTags || [];
 
   return (
     <div className="stack gap-lg">
-      <div className="card">
-        <div className="card-head">
-          <div>
-            <p className="eyebrow">Content</p>
-            <h3>Categories</h3>
-          </div>
-          <button
-            className="btn primary small"
-            onClick={() => {
-              setEditingCategory(null);
-              setCategoryForm({ name: '', imageUrl: '', sortOrder: 0 });
-              setShowCategoryModal(true);
-            }}
-          >
-            <Plus size={14} /> New
-          </button>
-        </div>
-        <div className="table">
-          <div className="table-head">
-            <span>Name</span>
-            <span>Image</span>
-            <span>Sort</span>
-            <span />
-          </div>
-          {categories.map((category) => (
-            <div key={category.id} className="table-row">
-              <span>{category.name}</span>
-              <span className="mono">{category.image_url || category.imageUrl || '—'}</span>
-              <span>{category.sort_order ?? category.sortOrder ?? 0}</span>
-              <span>
-                <button
-                  className="icon-btn"
-                  onClick={() => {
-                    setEditingCategory(category);
-                    setCategoryForm({
-                      name: category.name || '',
-                      imageUrl: category.image_url || category.imageUrl || '',
-                      sortOrder: category.sort_order ?? category.sortOrder ?? 0,
-                    });
-                    setShowCategoryModal(true);
-                  }}
-                >
-                  <Edit size={14} />
-                </button>
-              </span>
+      <div className="grid two gap-lg">
+        <div className="card">
+          <div className="card-head">
+            <div>
+              <p className="eyebrow">Content</p>
+              <h3>Categories</h3>
             </div>
-          ))}
-          {content.isLoading ? <div className="empty">Loading categories...</div> : null}
-          {!content.isLoading && categories.length === 0 ? (
-            <div className="empty">No categories found.</div>
-          ) : null}
+            <button
+              className="btn primary small"
+              onClick={() => {
+                setEditingCategory(null);
+                setCategoryForm({ name: '', imageUrl: '', sortOrder: 0 });
+                setShowCategoryModal(true);
+              }}
+            >
+              <Plus size={14} /> New
+            </button>
+          </div>
+          <div className="table">
+            <div className="table-head">
+              <span>Name</span>
+              <span>Image</span>
+              <span>Sort</span>
+              <span />
+            </div>
+            {categories.map((category) => (
+              <div key={category.id} className="table-row">
+                <span>{category.name}</span>
+                <span className="mono">{category.image_url || category.imageUrl || '—'}</span>
+                <span>{category.sort_order ?? category.sortOrder ?? 0}</span>
+                <span>
+                  <button
+                    className="icon-btn"
+                    onClick={() => {
+                      setEditingCategory(category);
+                      setCategoryForm({
+                        name: category.name || '',
+                        imageUrl: category.image_url || category.imageUrl || '',
+                        sortOrder: category.sort_order ?? category.sortOrder ?? 0,
+                      });
+                      setShowCategoryModal(true);
+                    }}
+                  >
+                    <Edit size={14} />
+                  </button>
+                </span>
+              </div>
+            ))}
+            {content.isLoading ? <div className="empty">Loading categories...</div> : null}
+            {!content.isLoading && categories.length === 0 ? (
+              <div className="empty">No categories found.</div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head">
+            <div>
+              <p className="eyebrow">Settings</p>
+              <h3>Vendor Tags</h3>
+            </div>
+            <button
+              className="btn primary small"
+              onClick={() => {
+                setEditingTag(null);
+                setTagForm({ name: '', sortOrder: 0 });
+                setShowTagModal(true);
+              }}
+            >
+              <Plus size={14} /> New
+            </button>
+          </div>
+          <div className="table">
+            <div className="table-head">
+              <span>Name</span>
+              <span>Sort</span>
+              <span />
+            </div>
+            {vendorTags.map((tag) => (
+              <div key={tag.id} className="table-row">
+                <span>{tag.name}</span>
+                <span>{tag.sort_order ?? tag.sortOrder ?? 0}</span>
+                <span className="inline gap-sm">
+                  <button
+                    className="icon-btn"
+                    onClick={() => {
+                      setEditingTag(tag);
+                      setTagForm({
+                        name: tag.name || '',
+                        sortOrder: tag.sort_order ?? tag.sortOrder ?? 0,
+                      });
+                      setShowTagModal(true);
+                    }}
+                  >
+                    <Edit size={14} />
+                  </button>
+                  <button className="icon-btn danger" onClick={() => handleDeleteTag(tag.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                </span>
+              </div>
+            ))}
+            {!content.isLoading && vendorTags.length === 0 ? <div className="empty">No tags found.</div> : null}
+          </div>
         </div>
       </div>
 
@@ -258,6 +265,41 @@ export function ContentPage() {
           />
         </label>
         {createCategory.isError ? <p className="error">Unable to save category.</p> : null}
+      </Modal>
+
+      <Modal
+        open={showTagModal}
+        title={editingTag ? 'Edit Tag' : 'New Tag'}
+        onClose={() => setShowTagModal(false)}
+        footer={
+          <>
+            <button className="btn ghost" onClick={() => setShowTagModal(false)}>
+              Cancel
+            </button>
+            <button className="btn primary" onClick={handleTagSubmit} disabled={createTag.isPending}>
+              {createTag.isPending ? 'Saving...' : 'Save'}
+            </button>
+          </>
+        }
+      >
+        <label className="label">
+          Name
+          <input
+            className="input"
+            required
+            value={tagForm.name}
+            onChange={(e) => setTagForm((f) => ({ ...f, name: e.target.value }))}
+          />
+        </label>
+        <label className="label">
+          Sort order
+          <input
+            className="input"
+            type="number"
+            value={tagForm.sortOrder}
+            onChange={(e) => setTagForm((f) => ({ ...f, sortOrder: Number(e.target.value) }))}
+          />
+        </label>
       </Modal>
 
       <Modal

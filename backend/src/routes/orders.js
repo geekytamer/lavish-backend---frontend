@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuid } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
 const { resolveUrl } = require('../lib/url');
+const { sendStatusUpdate } = require('../services/email');
 
 const router = express.Router();
 
@@ -43,7 +44,7 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { items = [], shippingAddress = '', customerEmail = '', customerPhone = '', id: clientOrderId } = req.body || {};
+  const { items = [], shippingAddress = '', customerEmail = '', customerPhone = '', id: clientOrderId, couponCode } = req.body || {};
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Items are required' });
   }
@@ -62,13 +63,25 @@ router.post('/', (req, res) => {
     const db = req.app.locals.db;
     const placeholders = items.map(() => '?').join(',');
     const rows = db.all(
-      `SELECT id, vendor_id, price FROM products WHERE id IN (${placeholders})`,
+      `SELECT id, vendor_id, price, stock_quantity FROM products WHERE id IN (${placeholders})`,
       items.map((i) => i.productId),
     );
     if (!rows || rows.length !== items.length) {
       return res.status(400).json({ error: 'One or more products not found' });
     }
     const productMap = Object.fromEntries(rows.map((r) => [r.id, r]));
+
+    // Check stock availability first
+    for (const item of items) {
+      const product = productMap[item.productId];
+      const quantity = item.quantity || 1;
+      if (product.stock_quantity < quantity) {
+        return res.status(400).json({
+          error: `Insufficient stock for product: ${product.name}. Available: ${product.stock_quantity}`
+        });
+      }
+    }
+
     const vendorReceipts = {};
     items.forEach((item) => {
       const product = productMap[item.productId];
@@ -85,22 +98,44 @@ router.post('/', (req, res) => {
         lineTotal,
       });
     });
-    const total = Object.values(vendorReceipts).reduce((sum, v) => sum + v.subtotal, 0);
+    const subtotal = Object.values(vendorReceipts).reduce((sum, v) => sum + v.subtotal, 0);
+    let total = subtotal;
+    let discountAmount = 0;
+
+    if (couponCode) {
+      const coupon = db.get('SELECT * FROM coupons WHERE code = ? AND active = 1', [couponCode]);
+      if (coupon) {
+        if (subtotal >= (coupon.min_purchase || 0)) {
+          if (coupon.discount_type === 'percentage') {
+            discountAmount = (subtotal * coupon.discount_value) / 100;
+          } else {
+            discountAmount = coupon.discount_value;
+          }
+          discountAmount = Math.min(discountAmount, subtotal);
+          total = subtotal - discountAmount;
+        }
+      }
+    }
+
     try {
+      // Create Order
       db.run(
-        `INSERT INTO orders (id, customer_email, customer_phone, shipping_address, total, payment_status, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [orderId, customerEmail, customerPhone, shippingAddress, total, 'initiated', 'pending', now],
+        `INSERT INTO orders (id, customer_email, customer_phone, shipping_address, total, payment_status, status, created_at, coupon_code, discount_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [orderId, customerEmail, customerPhone, shippingAddress, total, 'initiated', 'pending', now, couponCode || null, discountAmount],
       );
 
+      // Create Order Items and Decrement Stock
       Object.values(vendorReceipts).forEach((receipt) => {
-        receipt.items.forEach((it) =>
+        receipt.items.forEach((it) => {
           db.run(
             `INSERT INTO order_items (order_id, product_id, quantity, color, size, line_total, status, vendor_id)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [orderId, it.productId, it.quantity || 1, it.color || null, it.size || null, it.lineTotal, 'pending', it.vendorId],
-          ),
-        );
+          );
+          // Decrement stock
+          db.run('UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?', [it.quantity || 1, it.productId]);
+        });
       });
       return res.status(201).json({
         order: {
@@ -109,6 +144,8 @@ router.post('/', (req, res) => {
           customerPhone,
           shippingAddress,
           total,
+          discountAmount,
+          couponCode,
           paymentStatus: 'initiated',
           status: 'pending',
           createdAt: now,
@@ -144,9 +181,9 @@ router.get('/products', (req, res) => {
       imageUrl: resolveUrl(
         req,
         row.imageUrl ||
-          row.image_url ||
-          fallbackImages[row.id] ||
-          'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=60',
+        row.image_url ||
+        fallbackImages[row.id] ||
+        'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=60',
       ),
     }));
     const total = totalRow?.count || 0;
@@ -197,7 +234,7 @@ router.get('/:id', (req, res) => {
   }
 });
 
-router.patch('/:id/status', requireAuth(['admin', 'vendor']), (req, res) => {
+router.patch('/:id/status', requireAuth(['admin', 'vendor']), async (req, res) => {
   const { status } = req.body || {};
   if (!status) return res.status(400).json({ error: 'status is required' });
   const db = req.app.locals.db;
@@ -214,6 +251,16 @@ router.patch('/:id/status', requireAuth(['admin', 'vendor']), (req, res) => {
     }
     const updatedOrder = db.get('SELECT * FROM orders WHERE id = ?', [orderId]) || orderRow;
     const items = db.all('SELECT * FROM order_items WHERE order_id = ?', [orderId]);
+
+    // Send Email Notification
+    if (orderRow.customer_email) {
+      await sendStatusUpdate({
+        email: orderRow.customer_email,
+        orderId: orderId,
+        status: status
+      });
+    }
+
     res.json({ order: { ...updatedOrder, items } });
   } catch (err) {
     res.status(500).json({ error: err.message });

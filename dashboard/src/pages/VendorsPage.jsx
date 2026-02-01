@@ -1,37 +1,64 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, UserRound, Edit } from 'lucide-react';
+import { Plus, Trash2, UserRound, Edit, Images, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useApiClient } from '../lib/api.js';
 import { Modal } from '../components/Modal.jsx';
 
+
+
 export function VendorsPage() {
   const api = useApiClient();
   const qc = useQueryClient();
-  const [form, setForm] = useState({ name: '', description: '', rating: '', tags: '' });
+  const [form, setForm] = useState({ name: '', description: '', rating: '', tags: '', email: '', password: '', logo_url: '' });
   const [editing, setEditing] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [lastCreated, setLastCreated] = useState(null);
+  const [pendingLogo, setPendingLogo] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [search, setSearch] = useState('');
+
+  const toggleTag = (tag) => {
+    setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  };
 
   const vendors = useQuery({
     queryKey: ['vendors', api.base],
     queryFn: () => api.get('/vendors').then((d) => d.vendors || []),
   });
 
+  const tagsQuery = useQuery({
+    queryKey: ['vendor-tags', api.base],
+    queryFn: () => api.get('/content/vendor-tags').then((d) => d.tags || []),
+  });
+
+  const availableTags = tagsQuery.data || [];
+
   const saveVendor = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      let logoUrl = form.logo_url;
+      if (pendingLogo) {
+        const res = await api.upload('/upload', pendingLogo);
+        logoUrl = res.file?.url || res.file?.path;
+      }
       const payload = {
         name: form.name,
         description: form.description,
         rating: Number(form.rating) || 0,
-        tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        tags: selectedTags,
+        logo_url: logoUrl,
       };
       if (editing) {
         return api.patch(`/vendors/${editing.id}`, payload);
       }
-      return api.post('/vendors', payload);
+      return api.post('/vendors', { ...payload, email: form.email, password: form.password });
     },
-    onSuccess: () => {
-      resetForm();
+    onSuccess: (data) => {
+      if (!editing) {
+        setLastCreated({ email: form.email, password: form.password, name: form.name });
+      }
+      resetForm(false); // don't close modal yet if we want to show success, or handle differently
       qc.invalidateQueries({ queryKey: ['vendors', api.base] });
     },
   });
@@ -41,10 +68,16 @@ export function VendorsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vendors', api.base] }),
   });
 
-  const resetForm = () => {
+  const resetForm = (close = true) => {
     setEditing(null);
-    setForm({ name: '', description: '', rating: '', tags: '' });
-    setShowModal(false);
+    setForm({ name: '', description: '', rating: '', tags: '', email: '', password: '', logo_url: '' });
+    setPendingLogo(null);
+    setLogoPreview(null);
+    setSelectedTags([]);
+    if (close) {
+      setShowModal(false);
+      setLastCreated(null);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -52,26 +85,44 @@ export function VendorsPage() {
     saveVendor.mutate();
   };
 
+  const filteredVendors = (vendors.data || []).filter((v) =>
+    v.name?.toLowerCase().includes(search.toLowerCase()) ||
+    v.id?.toLowerCase().includes(search.toLowerCase()) ||
+    (v.tags || []).some(t => t.toLowerCase().includes(search.toLowerCase()))
+  );
+
   return (
-    <div className="stack gap-lg">
+    <div className="stack gap-lg" >
       <div className="card">
         <div className="card-head">
           <div>
             <p className="eyebrow">Vendors</p>
             <h3>All vendors</h3>
           </div>
-          <button
-            className="btn primary small"
-            onClick={() => {
-              resetForm();
-              setShowModal(true);
-            }}
-          >
-            <Plus size={14} /> New
-          </button>
+          <div className="inline gap-md">
+            <div className="search-box">
+              <Search size={16} className="muted" />
+              <input
+                className="search-input"
+                placeholder="Search brands or tags..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <button
+              className="btn primary small"
+              onClick={() => {
+                resetForm();
+                setShowModal(true);
+              }}
+            >
+              <Plus size={14} /> New
+            </button>
+          </div>
         </div>
         <div className="table">
           <div className="table-head">
+            <span />
             <span>Name</span>
             <span>Rating</span>
             <span>Tags</span>
@@ -79,8 +130,13 @@ export function VendorsPage() {
             <span />
             <span />
           </div>
-          {(vendors.data || []).map((vendor) => (
+          {filteredVendors.map((vendor) => (
             <div key={vendor.id} className="table-row">
+              <span>
+                <div className="avatar small" style={{ overflow: 'hidden' }}>
+                  {vendor.logo_url ? <img src={vendor.logo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : vendor.name?.[0]}
+                </div>
+              </span>
               <span>
                 <div className="mono pill subtle">{vendor.id}</div>
                 <div>{vendor.name}</div>
@@ -108,8 +164,9 @@ export function VendorsPage() {
                       name: vendor.name || '',
                       description: vendor.description || '',
                       rating: vendor.rating || '',
-                      tags: (vendor.tags || []).join(','),
+                      logo_url: vendor.logo_url || '',
                     });
+                    setSelectedTags(vendor.tags || []);
                     setShowModal(true);
                   }}
                   title="Edit vendor"
@@ -139,59 +196,138 @@ export function VendorsPage() {
 
       <Modal
         open={showModal}
-        title={editing ? 'Edit vendor' : 'New vendor'}
-        onClose={resetForm}
+        title={lastCreated ? 'Vendor created' : editing ? 'Edit vendor' : 'New vendor'}
+        onClose={() => resetForm(true)}
         footer={
-          <>
-            <button className="btn ghost" onClick={resetForm}>
-              Cancel
+          lastCreated ? (
+            <button className="btn primary" onClick={() => resetForm(true)}>
+              Done
             </button>
-            <button className="btn primary" onClick={handleSubmit} disabled={saveVendor.isPending}>
-              <Plus size={14} />
-              {saveVendor.isPending ? 'Saving...' : 'Save vendor'}
-            </button>
-          </>
+          ) : (
+            <>
+              <button className="btn ghost" onClick={() => resetForm(true)}>
+                Cancel
+              </button>
+              <button className="btn primary" onClick={handleSubmit} disabled={saveVendor.isPending}>
+                <Plus size={14} />
+                {saveVendor.isPending ? 'Saving...' : 'Save vendor'}
+              </button>
+            </>
+          )
         }
       >
-        <label className="label">
-          Name
-          <input
-            className="input"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            required
-          />
-        </label>
-        <label className="label">
-          Rating
-          <input
-            className="input"
-            type="number"
-            step="0.1"
-            value={form.rating}
-            onChange={(e) => setForm((f) => ({ ...f, rating: e.target.value }))}
-          />
-        </label>
-        <label className="label">
-          Description
-          <textarea
-            className="input"
-            rows={2}
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          />
-        </label>
-        <label className="label">
-          Tags (comma-separated)
-          <input
-            className="input"
-            value={form.tags}
-            onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
-            placeholder="Womenswear, Denim"
-          />
-        </label>
-        {saveVendor.isError ? <p className="error">Could not save vendor.</p> : null}
+        {lastCreated ? (
+          <div className="stack gap-sm">
+            <p className="success">Vendor account for <strong>{lastCreated.name}</strong> has been created successfully.</p>
+            <div className="card subtle">
+              <p className="eyebrow">Credentials</p>
+              <p>Email: <strong>{lastCreated.email}</strong></p>
+              <p>Password: <strong>{lastCreated.password}</strong></p>
+              <p className="muted xs">These details have been sent to the vendor via email.</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <label className="label">
+              Store Logo
+              <div className="inline gap-md">
+                <button className="upload-btn" onClick={() => document.getElementById('logo-file').click()}>
+                  <Images size={14} /> Select Logo
+                </button>
+                {(logoPreview || form.logo_url) && <img src={logoPreview || form.logo_url} className="avatar" />}
+                <input
+                  id="logo-file"
+                  type="file"
+                  hidden
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    setPendingLogo(file);
+                    setLogoPreview(URL.createObjectURL(file));
+                  }}
+                />
+              </div>
+            </label>
+            <label className="label">
+              Name
+              <input
+                className="input"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                required
+              />
+            </label>
+            {!editing && (
+              <>
+                <label className="label">
+                  Vendor Email
+                  <input
+                    className="input"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="store-admin@example.com"
+                    required
+                  />
+                </label>
+                <label className="label">
+                  Temporary Password (sent via email)
+                  <input
+                    className="input"
+                    type="text"
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                    placeholder="SecurePass123!"
+                    required
+                  />
+                </label>
+              </>
+            )}
+            <label className="label">
+              Rating
+              <input
+                className="input"
+                type="number"
+                step="0.1"
+                value={form.rating}
+                onChange={(e) => setForm((f) => ({ ...f, rating: e.target.value }))}
+              />
+            </label>
+            <label className="label">
+              Description
+              <textarea
+                className="input"
+                rows={2}
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </label>
+            <label className="label">
+              Category Focus
+              <div className="flex-wrap" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {availableTags.map((tagObj) => {
+                  const tag = tagObj.name;
+                  const active = selectedTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      className={`pill ${active ? 'primary' : 'subtle'} clickable`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleTag(tag);
+                      }}
+                      style={{ border: 'none', cursor: 'pointer' }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </label>
+            {saveVendor.isError ? <p className="error">Could not save vendor.</p> : null}
+          </>
+        )}
       </Modal>
-    </div>
+    </div >
   );
 }

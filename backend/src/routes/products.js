@@ -21,9 +21,9 @@ function parseProduct(row, req) {
     imageUrl: resolveUrl(
       req,
       row.imageUrl ||
-        row.image_url ||
-        fallbackImages[row.id] ||
-        'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=60',
+      row.image_url ||
+      fallbackImages[row.id] ||
+      'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=60',
     ),
   };
 }
@@ -31,7 +31,16 @@ function parseProduct(row, req) {
 router.get('/', (req, res) => {
   try {
     const db = req.app.locals.db;
-    const rows = db.all('SELECT * FROM products');
+    const { vendorId } = req.query;
+    let query = 'SELECT * FROM products';
+    const params = [];
+
+    if (vendorId) {
+      query += ' WHERE vendor_id = ?';
+      params.push(vendorId);
+    }
+
+    const rows = db.all(query, params);
     res.json({ products: rows.map((row) => parseProduct(row, req)) });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -61,6 +70,7 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
     imageUrl = '',
     gallery = [],
     isFeatured = false,
+    stockQuantity = 0,
   } = req.body || {};
   if (!name || price == null) return res.status(400).json({ error: 'name and price required' });
   const resolvedVendorId = req.user?.role === 'vendor' ? req.user.vendorId : vendorId;
@@ -72,8 +82,8 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
     const cleanImage = toRelative(imageUrl);
     const cleanGallery = (gallery || []).map((g) => toRelative(g));
     db.run(
-      `INSERT INTO products (id, vendor_id, name, description, price, sizes, colors, category_id, image_url, gallery, is_featured)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO products (id, vendor_id, name, description, price, sizes, colors, category_id, image_url, gallery, is_featured, stock_quantity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         productId,
         resolvedVendorId,
@@ -86,6 +96,7 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
         cleanImage,
         JSON.stringify(cleanGallery),
         isFeatured ? 1 : 0,
+        Number(stockQuantity) || 0,
       ],
     );
     const created = db.get('SELECT * FROM products WHERE id = ?', [productId]);
@@ -96,7 +107,7 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
 });
 
 router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
-  const { name, description, price, sizes, colors, categoryId, imageUrl, gallery, isFeatured, vendorId } = req.body || {};
+  const { name, description, price, sizes, colors, categoryId, imageUrl, gallery, isFeatured, vendorId, stockQuantity } = req.body || {};
   try {
     const db = req.app.locals.db;
     const existing = db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
@@ -119,7 +130,8 @@ router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
            image_url = COALESCE(?, image_url),
            gallery = COALESCE(?, gallery),
            is_featured = COALESCE(?, is_featured),
-           vendor_id = COALESCE(?, vendor_id)
+           vendor_id = COALESCE(?, vendor_id),
+           stock_quantity = COALESCE(?, stock_quantity)
        WHERE id = ?`,
       [
         name,
@@ -132,6 +144,7 @@ router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
         cleanGallery,
         isFeatured == null ? null : isFeatured ? 1 : 0,
         resolvedVendorId,
+        stockQuantity == null ? null : Number(stockQuantity),
         req.params.id,
       ],
     );

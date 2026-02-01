@@ -1,7 +1,7 @@
 import { format, parseISO, startOfWeek } from 'date-fns';
 
 export const formatCurrency = (value = 0) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
+  new Intl.NumberFormat('en-OM', { style: 'currency', currency: 'OMR', minimumFractionDigits: 2 }).format(
     Number.isFinite(value) ? value : 0,
   );
 

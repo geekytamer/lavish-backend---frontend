@@ -9,6 +9,8 @@ import {
   Megaphone,
   LogOut,
   Link2,
+  Tag,
+  MessageSquare,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 
@@ -19,6 +21,8 @@ const adminNav = [
   { to: '/products', label: 'Products', icon: Package },
   { to: '/payouts', label: 'Payouts', icon: Wallet },
   { to: '/content', label: 'Content', icon: Megaphone },
+  { to: '/coupons', label: 'Coupons', icon: Tag },
+  { to: '/reviews', label: 'Reviews', icon: MessageSquare },
 ];
 
 const vendorNav = [
@@ -76,45 +80,28 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar-note">
-          <p>API calls target the configured base URL. Adjust anytime in the header.</p>
+        <div style={{ marginTop: 'auto' }}>
+          <button className="nav-link danger-hover" onClick={logout} style={{ width: '100%', border: 'none', background: 'none', cursor: 'pointer' }}>
+            <LogOut size={18} />
+            <span>Sign out</span>
+          </button>
         </div>
       </aside>
       <div className="main">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Lavish Fashion · Admin</p>
+            <p className="eyebrow">{role === 'admin' ? 'Administration' : 'Vendor Dashboard'}</p>
             <h1 className="page-title">{title}</h1>
           </div>
           <div className="topbar-actions">
-            <div className="api-control">
-              <label className="label">
-                <Link2 size={14} /> API base
-              </label>
-              <div className="api-row">
-                <input
-                  className="input"
-                  value={draftBase}
-                  onChange={(e) => setDraftBase(e.target.value)}
-                  placeholder="http://localhost:4000/api"
-                  spellCheck="false"
-                />
-                <button className="btn ghost" onClick={handleSaveBase}>
-                  Apply
-                </button>
-              </div>
-              <p className="muted xs">
-                Currently <strong>{apiBase}</strong> {savedAt ? '· saved' : ''}
-              </p>
+            <div className="api-control" style={{ opacity: 0.6 }}>
+              {/* Hidden or subtle API control */}
             </div>
             <div className="user-chip">
+              <div className="avatar">{role?.[0]?.toUpperCase()}</div>
               <div>
-                <div className="chip-title">Signed in</div>
-                <div className="chip-subtitle">{role || 'role not set'}</div>
+                <div className="chip-subtitle" style={{ fontSize: '14px' }}>{role === 'admin' ? 'Store Admin' : 'Vendor Partner'}</div>
               </div>
-              <button className="icon-btn" onClick={logout} title="Log out">
-                <LogOut size={16} />
-              </button>
             </div>
           </div>
         </header>

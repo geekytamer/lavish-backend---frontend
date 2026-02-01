@@ -8,6 +8,8 @@ import { VendorProfilePage } from './pages/VendorProfilePage.jsx';
 import { ProductsPage } from './pages/ProductsPage.jsx';
 import { PayoutsPage } from './pages/PayoutsPage.jsx';
 import { ContentPage } from './pages/ContentPage.jsx';
+import { CouponsPage } from './pages/CouponsPage.jsx';
+import { ReviewsPage } from './pages/ReviewsPage.jsx';
 import { useApp } from './context/AppContext.jsx';
 
 function RequireAuth() {
@@ -39,6 +41,8 @@ function App() {
             <Route path="/products" element={<ProductsPage />} />
             {isVendor ? null : <Route path="/payouts" element={<PayoutsPage />} />}
             {isVendor ? null : <Route path="/content" element={<ContentPage />} />}
+            {isVendor ? null : <Route path="/coupons" element={<CouponsPage />} />}
+            {isVendor ? null : <Route path="/reviews" element={<ReviewsPage />} />}
             <Route path="*" element={<Navigate to={isVendor ? '/vendor/profile' : '/'} replace />} />
           </Route>
         </Route>

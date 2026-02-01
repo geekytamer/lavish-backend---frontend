@@ -22,7 +22,8 @@ const ready = (async () => {
       name TEXT NOT NULL,
       description TEXT,
       rating REAL DEFAULT 0,
-      tags TEXT DEFAULT ''
+      tags TEXT DEFAULT '',
+      logo_url TEXT
     );
   `);
   db.run(`
@@ -30,7 +31,7 @@ const ready = (async () => {
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('admin','vendor')),
+      role TEXT NOT NULL CHECK(role IN ('admin','vendor','customer')),
       vendor_id TEXT,
       created_at TEXT NOT NULL
     );
@@ -125,6 +126,52 @@ const ready = (async () => {
     );
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS reviews (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      rating INTEGER NOT NULL,
+      comment TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS coupons (
+      id TEXT PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      discount_type TEXT NOT NULL,
+      discount_value REAL NOT NULL,
+      min_purchase REAL DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      expiry_date TEXT,
+      vendor_id TEXT
+    );
+  `);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS addresses (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      details TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      city TEXT NOT NULL,
+      is_default INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS vendor_tags (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0
+    );
+  `);
+
   seedIfNeeded();
   ensureColumns();
   persist();
@@ -209,12 +256,38 @@ function seedIfNeeded() {
   vendorStmt.free();
 
   const productStmt = db.prepare(
-    'INSERT INTO products (id, vendor_id, name, description, price, sizes, colors) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO products (id, vendor_id, name, description, price, sizes, colors, stock_quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   );
   products.forEach((p) =>
-    productStmt.run([p.id, p.vendor_id, p.name, p.description, p.price, p.sizes, p.colors]),
+    productStmt.run([p.id, p.vendor_id, p.name, p.description, p.price, p.sizes, p.colors, p.stock || 15]),
   );
   productStmt.free();
+
+  // Seed coupons
+  const existingCoupons = get('SELECT COUNT(*) as count FROM coupons');
+  if (!existingCoupons || existingCoupons.count === 0) {
+    run("INSERT INTO coupons (id, code, discount_type, discount_value, min_purchase, vendor_id) VALUES ('c-lavish10', 'LAVISH10', 'percentage', 10, 0, NULL)");
+    run("INSERT INTO coupons (id, code, discount_type, discount_value, min_purchase, vendor_id) VALUES ('c-welcome20', 'WELCOME20', 'fixed', 20, 100, NULL)");
+  }
+
+  // Seed vendor tags
+  const existingTags = get('SELECT COUNT(*) as count FROM vendor_tags');
+  if (!existingTags || existingTags.count === 0) {
+    const tags = [
+      'Womenswear', 'Menswear', 'Streetwear', 'Accessories', 'Evening', 'Athleisure', 'Denim', 'Footwear', 'Luxury'
+    ];
+    tags.forEach((tag, i) => {
+      // creating pseudo-random uuid-like string for simplicity in sync context or import uuid if available. 
+      // db.js imports 'run' helper which works. But we need UUIDs.
+      // Since this is initialization and we can't easily import uuid inside this scope if not already available (it IS available at top level `initSqlJs` context... wait, top level `db.js` has no `uuid` import? No, `routes/vendors.js` has it. `db.js` does NOT.
+      // I need to add `const { v4: uuid } = require('uuid');` to `db.js` top level first or just use random string.
+      // I'll add the import in a separate step or just use timestamp+index for seed.
+      const id = 'tag-' + Math.random().toString(36).substr(2, 9);
+      const stmt = db.prepare('INSERT INTO vendor_tags (id, name, sort_order) VALUES (?, ?, ?)');
+      stmt.run([id, tag, i]);
+      stmt.free();
+    });
+  }
 
   console.log('Seeded vendors and products into SQLite (sql.js)');
 }
@@ -225,10 +298,16 @@ function ensureColumns() {
     "ALTER TABLE products ADD COLUMN image_url TEXT",
     "ALTER TABLE products ADD COLUMN gallery TEXT",
     "ALTER TABLE products ADD COLUMN is_featured INTEGER DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN stock_quantity INTEGER DEFAULT 0",
     "ALTER TABLE orders ADD COLUMN session_id TEXT",
     "ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'pending'",
     "ALTER TABLE orders ADD COLUMN customer_phone TEXT",
     "ALTER TABLE order_items ADD COLUMN status TEXT DEFAULT 'pending'",
+    "ALTER TABLE users ADD COLUMN thawani_customer_id TEXT",
+    "ALTER TABLE orders ADD COLUMN coupon_code TEXT",
+    "ALTER TABLE vendors ADD COLUMN logo_url TEXT",
+    "ALTER TABLE coupons ADD COLUMN id TEXT",
+    "ALTER TABLE coupons ADD COLUMN vendor_id TEXT",
   ];
   statements.forEach((sql) => {
     try {

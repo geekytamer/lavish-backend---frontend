@@ -1,15 +1,20 @@
 const express = require('express');
 const { v4: uuid } = require('uuid');
 const { requireAuth } = require('../middleware/auth');
+const bcrypt = require('bcryptjs');
+const { Resend } = require('resend');
+const config = require('../config');
 
 const router = express.Router();
+
+const resend = new Resend(config.resendApiKey);
 
 function parseVendor(row) {
   return row
     ? {
-        ...row,
-        tags: row.tags ? JSON.parse(row.tags) : [],
-      }
+      ...row,
+      tags: row.tags ? JSON.parse(row.tags) : [],
+    }
     : null;
 }
 
@@ -23,30 +28,75 @@ router.get('/', (_req, res) => {
   }
 });
 
-router.post('/', requireAuth(['admin']), (req, res) => {
-  const { name, description = '', rating = 0, tags = [], id } = req.body || {};
-  if (!name) return res.status(400).json({ error: 'Name is required' });
+router.post('/', requireAuth(['admin']), async (req, res) => {
+  const { name, email, password, description = '', tags = [], id, logo_url } = req.body || {};
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required' });
+  }
+
   try {
     const db = req.app.locals.db;
+
+    // 1. Check if user or vendor already exists
+    const existingUser = db.get('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingUser) return res.status(400).json({ error: 'Email already registered' });
+
     const vendorId = id || `v-${uuid().slice(0, 8)}`;
+    const userId = uuid();
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 2. Create Vendor
     db.run(
-      'INSERT INTO vendors (id, name, description, rating, tags) VALUES (?, ?, ?, ?, ?)',
-      [vendorId, name, description, Number(rating) || 0, JSON.stringify(tags || [])],
+      'INSERT INTO vendors (id, name, description, rating, tags, logo_url) VALUES (?, ?, ?, ?, ?, ?)',
+      [vendorId, name, description, 5.0, JSON.stringify(tags || []), logo_url || null],
     );
+
+    // 3. Create User
+    db.run(
+      'INSERT INTO users (id, email, password_hash, role, vendor_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [userId, email, hashedPassword, 'vendor', vendorId, new Date().toISOString()],
+    );
+
+    // 4. Send Credentials Email via Resend
+    try {
+      await resend.emails.send({
+        from: 'Lavish Fashion <onboarding@resend.dev>', // Use verified domain in production
+        to: email,
+        subject: 'Welcome to Lavish - Your Vendor Credentials',
+        html: `
+          <h1>Welcome to Lavish, ${name}!</h1>
+          <p>Your store has been successfully created. You can now log in to the vendor dashboard using the following credentials:</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Temporary Password:</strong> ${password}</p>
+          <p>Please change your password after your first login.</p>
+          <br/>
+          <p>Best regards,<br/>The Lavish Team</p>
+        `,
+      });
+      console.log(`[VENDORS] Credentials email sent to ${email}`);
+    } catch (emailErr) {
+      console.error('Failed to send vendor email:', emailErr);
+      // We don't fail the whole request since the DB entries are made
+    }
+
     const created = db.get('SELECT * FROM vendors WHERE id = ?', [vendorId]);
-    res.status(201).json({ vendor: parseVendor(created) });
+    res.status(201).json({
+      vendor: parseVendor(created),
+      message: 'Vendor created and credentials sent.'
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 router.patch('/:id', requireAuth(['admin']), (req, res) => {
-  const { name, description, rating, tags } = req.body || {};
+  const { name, description, rating, tags, logo_url } = req.body || {};
   try {
     const db = req.app.locals.db;
     db.run(
-      'UPDATE vendors SET name = COALESCE(?, name), description = COALESCE(?, description), rating = COALESCE(?, rating), tags = COALESCE(?, tags) WHERE id = ?',
-      [name, description, rating == null ? null : Number(rating), tags ? JSON.stringify(tags) : null, req.params.id],
+      'UPDATE vendors SET name = COALESCE(?, name), description = COALESCE(?, description), rating = COALESCE(?, rating), tags = COALESCE(?, tags), logo_url = COALESCE(?, logo_url) WHERE id = ?',
+      [name, description, rating == null ? null : Number(rating), tags ? JSON.stringify(tags) : null, logo_url || null, req.params.id],
     );
     const updated = db.get('SELECT * FROM vendors WHERE id = ?', [req.params.id]);
     if (!updated) return res.status(404).json({ error: 'Vendor not found' });
@@ -166,6 +216,10 @@ router.get('/:id/profile', (req, res) => {
       orders: receipts.length,
       revenue: receipts.reduce((sum, r) => sum + (r.subtotal || 0), 0),
     };
+    stats.itemsSold = db.get('SELECT SUM(quantity) as count FROM order_items WHERE vendor_id = ?', [vendorId]).count || 0;
+    stats.aov = stats.orders > 0 ? stats.revenue / stats.orders : 0;
+    stats.totalPaid = payouts.filter(p => p.status === 'paid').reduce((sum, p) => sum + (p.amount || 0), 0);
+    stats.balance = stats.revenue - stats.totalPaid;
     res.json({ vendor, products, receipts, payouts, stats });
   } catch (err) {
     res.status(500).json({ error: err.message });

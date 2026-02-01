@@ -12,34 +12,10 @@ const safeGet = (key, fallback) => {
   }
 };
 
-const normalizeBase = (value) => {
-  if (!value) return DEFAULT_API_BASE;
-  return value.endsWith('/') ? value.slice(0, -1) : value;
-};
-
 export function AppProvider({ children }) {
-  const [apiBase, setApiBase] = useState(() => safeGet(STORAGE_KEYS.apiBase, DEFAULT_API_BASE));
   const [token, setToken] = useState(() => safeGet(STORAGE_KEYS.token, ''));
   const [role, setRole] = useState(() => safeGet(STORAGE_KEYS.role, ''));
   const [vendorId, setVendorId] = useState(() => safeGet(STORAGE_KEYS.vendorId, ''));
-
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const api = params.get('api');
-      if (api) setApiBase(api);
-    } catch (e) {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.apiBase, apiBase || DEFAULT_API_BASE);
-    } catch (e) {
-      // ignore
-    }
-  }, [apiBase]);
 
   useEffect(() => {
     try {
@@ -53,9 +29,8 @@ export function AppProvider({ children }) {
     }
   }, [token, role, vendorId]);
 
-  const login = async ({ email, password, baseOverride }) => {
-    const base = normalizeBase(baseOverride || apiBase || DEFAULT_API_BASE);
-    const res = await fetch(`${base}/auth/login`, {
+  const login = async ({ email, password }) => {
+    const res = await fetch(`${DEFAULT_API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -65,7 +40,6 @@ export function AppProvider({ children }) {
       const message = data?.error || 'Login failed';
       throw new Error(message);
     }
-    setApiBase(base);
     setToken(data.token);
     setRole(data.role || '');
     setVendorId(data.vendorId || '');
@@ -80,8 +54,7 @@ export function AppProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      apiBase: normalizeBase(apiBase || DEFAULT_API_BASE),
-      setApiBase,
+      apiBase: DEFAULT_API_BASE,
       token,
       role,
       vendorId,
@@ -89,7 +62,7 @@ export function AppProvider({ children }) {
       logout,
       isAuthed: Boolean(token),
     }),
-    [apiBase, token, role, vendorId],
+    [token, role, vendorId],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
