@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Star, User, MessageSquare } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
-import { formatDateTime } from '../lib/formatters.js';
+import { formatDateTime } from '../lib/formatters.jsx';
 
 export function ReviewsPage() {
     const api = useApiClient();

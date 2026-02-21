@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { TrendingUp, Users, ShoppingBag } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { useApp } from '../context/AppContext.jsx';
-import { formatCurrency, formatDateTime } from '../lib/formatters.js';
+import { formatCurrency, formatDateTime } from '../lib/formatters.jsx';
 import { StatCard } from '../components/StatCard.jsx';
 import { StatusPill } from '../components/StatusPill.jsx';
 

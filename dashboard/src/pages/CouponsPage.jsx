@@ -3,7 +3,7 @@ import { Plus, Trash2, Tag } from 'lucide-react';
 import { useState } from 'react';
 import { useApiClient } from '../lib/api.js';
 import { Modal } from '../components/Modal.jsx';
-import { formatCurrency } from '../lib/formatters.js';
+import { formatCurrency } from '../lib/formatters.jsx';
 
 export function CouponsPage() {
     const api = useApiClient();

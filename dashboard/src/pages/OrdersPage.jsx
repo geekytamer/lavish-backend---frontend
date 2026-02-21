@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { RefreshCw, Printer } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { useApp } from '../context/AppContext.jsx';
-import { formatCurrency, formatDateTime } from '../lib/formatters.js';
+import { formatCurrency, formatDateTime } from '../lib/formatters.jsx';
 import { StatusPill } from '../components/StatusPill.jsx';
 
 const ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];

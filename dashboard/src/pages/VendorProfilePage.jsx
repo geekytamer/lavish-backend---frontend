@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo } from 'react';
 import { ArrowLeft, Plus, Edit, Camera, Save, X } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
-import { formatCurrency, formatDateTime, weeklyBuckets } from '../lib/formatters.js';
+import { formatCurrency, formatDateTime, weeklyBuckets } from '../lib/formatters.jsx';
 import { StatusPill } from '../components/StatusPill.jsx';
 import { StatCard } from '../components/StatCard.jsx';
 import { Link } from 'react-router-dom';

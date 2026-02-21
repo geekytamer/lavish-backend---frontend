@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo } from 'react';
 import { CheckCircle, Plus, RefreshCw } from 'lucide-react';
 import { useApiClient, buildQuery } from '../lib/api.js';
-import { formatCurrency, formatDateTime } from '../lib/formatters.js';
+import { formatCurrency, formatDateTime } from '../lib/formatters.jsx';
 import { StatusPill } from '../components/StatusPill.jsx';
 
 export function PayoutsPage() {

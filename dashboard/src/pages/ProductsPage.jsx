@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { Trash2, Plus, Images, Edit, Search } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { useApp } from '../context/AppContext.jsx';
-import { formatCurrency } from '../lib/formatters.js';
+import { formatCurrency } from '../lib/formatters.jsx';
 import { validateImage } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
 import { StatCard } from '../components/StatCard.jsx';
