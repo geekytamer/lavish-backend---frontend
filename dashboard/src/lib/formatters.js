@@ -1,9 +1,18 @@
 import { format, parseISO, startOfWeek } from 'date-fns';
 
-export const formatCurrency = (value = 0) =>
-  new Intl.NumberFormat('en-OM', { style: 'currency', currency: 'OMR', minimumFractionDigits: 2 }).format(
-    Number.isFinite(value) ? value : 0,
+export const formatCurrency = (value = 0) => {
+  const num = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0);
+  return (
+    <span className="currency-wrap" style={{ whiteSpace: 'nowrap' }}>
+      {num} <img src="/omr_symbol.png" alt="OMR" style={{ height: '0.9em', verticalAlign: 'baseline', opacity: 0.8 }} />
+    </span>
   );
+};
+
+export const formatCurrencyStr = (value = 0) => {
+  const num = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0);
+  return `${num} OMR`;
+};
 
 export const formatDateTime = (value) => {
   if (!value) return '—';

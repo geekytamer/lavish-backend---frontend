@@ -17,6 +17,7 @@ function parseProduct(row, req) {
     ...row,
     sizes: row.sizes ? JSON.parse(row.sizes) : [],
     colors: row.colors ? JSON.parse(row.colors) : [],
+    tags: row.tags ? JSON.parse(row.tags) : [],
     gallery: gallery.map((g) => resolveUrl(req, g)),
     imageUrl: resolveUrl(
       req,
@@ -71,6 +72,7 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
     gallery = [],
     isFeatured = false,
     stockQuantity = 0,
+    tags = [],
   } = req.body || {};
   if (!name || price == null) return res.status(400).json({ error: 'name and price required' });
   const resolvedVendorId = req.user?.role === 'vendor' ? req.user.vendorId : vendorId;
@@ -82,8 +84,8 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
     const cleanImage = toRelative(imageUrl);
     const cleanGallery = (gallery || []).map((g) => toRelative(g));
     db.run(
-      `INSERT INTO products (id, vendor_id, name, description, price, sizes, colors, category_id, image_url, gallery, is_featured, stock_quantity)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO products (id, vendor_id, name, description, price, sizes, colors, category_id, image_url, gallery, is_featured, stock_quantity, tags)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         productId,
         resolvedVendorId,
@@ -97,6 +99,7 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
         JSON.stringify(cleanGallery),
         isFeatured ? 1 : 0,
         Number(stockQuantity) || 0,
+        JSON.stringify(tags || []),
       ],
     );
     const created = db.get('SELECT * FROM products WHERE id = ?', [productId]);
@@ -107,7 +110,7 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
 });
 
 router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
-  const { name, description, price, sizes, colors, categoryId, imageUrl, gallery, isFeatured, vendorId, stockQuantity } = req.body || {};
+  const { name, description, price, sizes, colors, categoryId, imageUrl, gallery, isFeatured, vendorId, stockQuantity, tags } = req.body || {};
   try {
     const db = req.app.locals.db;
     const existing = db.get('SELECT * FROM products WHERE id = ?', [req.params.id]);
@@ -131,7 +134,8 @@ router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
            gallery = COALESCE(?, gallery),
            is_featured = COALESCE(?, is_featured),
            vendor_id = COALESCE(?, vendor_id),
-           stock_quantity = COALESCE(?, stock_quantity)
+           stock_quantity = COALESCE(?, stock_quantity),
+           tags = COALESCE(?, tags)
        WHERE id = ?`,
       [
         name,
@@ -145,6 +149,7 @@ router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
         isFeatured == null ? null : isFeatured ? 1 : 0,
         resolvedVendorId,
         stockQuantity == null ? null : Number(stockQuantity),
+        tags ? JSON.stringify(tags) : null,
         req.params.id,
       ],
     );

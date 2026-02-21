@@ -360,14 +360,39 @@ export function ContentPage() {
             onChange={(e) => setPromoForm((f) => ({ ...f, cta: e.target.value }))}
           />
         </label>
-        <label className="label">
-          Link
-          <input
-            className="input"
-            value={promoForm.link}
-            onChange={(e) => setPromoForm((f) => ({ ...f, link: e.target.value }))}
-          />
-        </label>
+        <div className="grid two gap-md">
+          <label className="label">
+            Link Type
+            <select
+              className="input"
+              value={promoForm.link.split(':')[0] || ''}
+              onChange={(e) => {
+                const type = e.target.value;
+                const rest = promoForm.link.includes(':') ? promoForm.link.split(':').slice(1).join(':') : '';
+                setPromoForm(f => ({ ...f, link: type ? `${type}:${rest}` : '' }));
+              }}
+            >
+              <option value="">None</option>
+              <option value="store">Store</option>
+              <option value="product">Product</option>
+              <option value="tag">Tag</option>
+            </select>
+          </label>
+          <label className="label">
+            Target Value
+            <input
+              className="input"
+              value={promoForm.link.includes(':') ? promoForm.link.split(':').slice(1).join(':') : promoForm.link}
+              onChange={(e) => {
+                const val = e.target.value;
+                const type = promoForm.link.includes(':') ? promoForm.link.split(':')[0] : '';
+                setPromoForm(f => ({ ...f, link: type ? `${type}:${val}` : val }));
+              }}
+              disabled={!promoForm.link.includes(':')}
+              placeholder={promoForm.link.startsWith('store') ? 'Vendor ID (e.g. v-...)' : promoForm.link.startsWith('product') ? 'Product ID (e.g. p-...)' : promoForm.link.startsWith('tag') ? 'Tag text' : ''}
+            />
+          </label>
+        </div>
         <label className="label">
           Sort order
           <input

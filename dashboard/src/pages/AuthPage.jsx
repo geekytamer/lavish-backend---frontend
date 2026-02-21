@@ -61,7 +61,7 @@ export function AuthPage() {
             className="input"
             type="password"
             required
-            placeholder="••••••••"
+            placeholder="Type your password..."
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
           />

@@ -11,6 +11,7 @@ import {
   Link2,
   Tag,
   MessageSquare,
+  Activity,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 
@@ -23,12 +24,14 @@ const adminNav = [
   { to: '/content', label: 'Content', icon: Megaphone },
   { to: '/coupons', label: 'Coupons', icon: Tag },
   { to: '/reviews', label: 'Reviews', icon: MessageSquare },
+  { to: '/analytics', label: 'Analytics', icon: Activity },
 ];
 
 const vendorNav = [
   { to: '/vendor/profile', label: 'My brand', icon: Store },
   { to: '/products', label: 'Products', icon: Package },
   { to: '/orders', label: 'Orders', icon: Receipt },
+  { to: '/analytics', label: 'Analytics', icon: Activity },
 ];
 
 const titles = {
@@ -38,6 +41,7 @@ const titles = {
   '/products': 'Products',
   '/payouts': 'Payouts',
   '/content': 'Content',
+  '/analytics': 'Analytics',
 };
 
 export default function Layout() {

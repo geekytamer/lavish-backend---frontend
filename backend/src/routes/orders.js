@@ -8,14 +8,39 @@ const router = express.Router();
 
 router.get('/', (req, res) => {
   try {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    let user = null;
+    if (token) {
+      try {
+        user = require('jsonwebtoken').verify(token, require('../config').jwtSecret);
+      } catch (e) { }
+    }
+
     const db = req.app.locals.db;
     const limit = Math.min(Number(req.query.limit) || 20, 100);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
-    const totalRow = db.get('SELECT COUNT(*) as count FROM orders');
-    const orderRows = db.all(
-      `SELECT * FROM orders ORDER BY datetime(created_at) DESC LIMIT ? OFFSET ?`,
-      [limit, offset],
-    );
+
+    let totalRow = { count: 0 };
+    let orderRows = [];
+
+    if (user && user.role === 'admin') {
+      totalRow = db.get('SELECT COUNT(*) as count FROM orders');
+      orderRows = db.all(
+        `SELECT * FROM orders ORDER BY datetime(created_at) DESC LIMIT ? OFFSET ?`,
+        [limit, offset],
+      );
+    } else if (user) {
+      const userRecord = db.get('SELECT email FROM users WHERE id = ?', [user.sub]);
+      if (userRecord && userRecord.email) {
+        totalRow = db.get('SELECT COUNT(*) as count FROM orders WHERE customer_email = ?', [userRecord.email]);
+        orderRows = db.all(
+          `SELECT * FROM orders WHERE customer_email = ? ORDER BY datetime(created_at) DESC LIMIT ? OFFSET ?`,
+          [userRecord.email, limit, offset],
+        );
+      }
+    }
+
     const ids = orderRows.map((o) => o.id);
     let items = [];
     if (ids.length) {

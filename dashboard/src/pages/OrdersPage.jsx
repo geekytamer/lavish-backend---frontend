@@ -84,7 +84,7 @@ export function OrdersPage() {
               ${itemsHtml}
               <tr class="total-row">
                 <td>Total</td>
-                <td style="text-align: right;">${formatCurrency(order.total)}</td>
+                <td style="text-align: right;">${formatCurrencyStr(order.total)}</td>
               </tr>
             </tbody>
           </table>

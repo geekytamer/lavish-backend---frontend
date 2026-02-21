@@ -298,7 +298,13 @@ function ensureColumns() {
     "ALTER TABLE products ADD COLUMN image_url TEXT",
     "ALTER TABLE products ADD COLUMN gallery TEXT",
     "ALTER TABLE products ADD COLUMN is_featured INTEGER DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN tags TEXT",
     "ALTER TABLE products ADD COLUMN stock_quantity INTEGER DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN views INTEGER DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN clicks INTEGER DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN shares INTEGER DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN likes INTEGER DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN carts INTEGER DEFAULT 0",
     "ALTER TABLE orders ADD COLUMN session_id TEXT",
     "ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'pending'",
     "ALTER TABLE orders ADD COLUMN customer_phone TEXT",
@@ -306,6 +312,9 @@ function ensureColumns() {
     "ALTER TABLE users ADD COLUMN thawani_customer_id TEXT",
     "ALTER TABLE orders ADD COLUMN coupon_code TEXT",
     "ALTER TABLE vendors ADD COLUMN logo_url TEXT",
+    "ALTER TABLE vendors ADD COLUMN views INTEGER DEFAULT 0",
+    "ALTER TABLE vendors ADD COLUMN clicks INTEGER DEFAULT 0",
+    "ALTER TABLE vendors ADD COLUMN shares INTEGER DEFAULT 0",
     "ALTER TABLE coupons ADD COLUMN id TEXT",
     "ALTER TABLE coupons ADD COLUMN vendor_id TEXT",
   ];
@@ -316,6 +325,31 @@ function ensureColumns() {
       // column may already exist
     }
   });
+
+  // Migrate users table check constraint
+  try {
+    const existingTable = get("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
+    if (existingTable && existingTable.sql && !existingTable.sql.includes("'customer'")) {
+      run("CREATE TABLE users_temp AS SELECT * FROM users");
+      run("DROP TABLE users");
+      run(`
+        CREATE TABLE users (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL CHECK(role IN ('admin','vendor','customer')),
+          vendor_id TEXT,
+          created_at TEXT NOT NULL,
+          thawani_customer_id TEXT
+        )
+      `);
+      run("INSERT INTO users SELECT id, email, password_hash, role, vendor_id, created_at, thawani_customer_id FROM users_temp");
+      run("DROP TABLE users_temp");
+      console.log("Migrated users table to allow 'customer' role.");
+    }
+  } catch (e) {
+    console.error("Error migrating users table constraint", e);
+  }
 }
 
 function all(query, params = []) {

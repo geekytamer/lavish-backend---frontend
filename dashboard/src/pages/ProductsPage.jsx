@@ -23,6 +23,7 @@ export function ProductsPage() {
     gallery: [],
     sizes: '',
     colors: '',
+    tags: '',
     stockQuantity: '',
   });
   const [pendingFiles, setPendingFiles] = useState([]);
@@ -71,6 +72,7 @@ export function ProductsPage() {
         gallery: [...form.gallery, ...uploadedUrls],
         sizes: form.sizes ? form.sizes.split(',').map((s) => s.trim()).filter(Boolean) : [],
         colors: form.colors ? form.colors.split(',').map((c) => c.trim()).filter(Boolean) : [],
+        tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
       };
       if (editing) {
         return api.patch(`/products/${editing.id}`, payload);
@@ -121,6 +123,7 @@ export function ProductsPage() {
       gallery: product.gallery || [],
       sizes: (product.sizes || []).join(','),
       colors: (product.colors || []).join(','),
+      tags: (product.tags || []).join(','),
       stockQuantity: product.stock_quantity || 0,
     });
     setPendingFiles([]);
@@ -141,6 +144,7 @@ export function ProductsPage() {
       gallery: [],
       sizes: '',
       colors: '',
+      tags: '',
       stockQuantity: '',
     });
     setPendingFiles([]);
@@ -202,6 +206,7 @@ export function ProductsPage() {
             <span>Gallery</span>
             <span>Sizes</span>
             <span>Colors</span>
+            <span>Tags</span>
             <span />
             <span />
           </div>
@@ -239,6 +244,13 @@ export function ProductsPage() {
                 {(product.colors || []).map((c) => (
                   <span key={c} className="pill info">
                     {c}
+                  </span>
+                ))}
+              </span>
+              <span className="tags">
+                {(product.tags || []).map((t) => (
+                  <span key={t} className="pill subtle">
+                    {t}
                   </span>
                 ))}
               </span>
@@ -414,6 +426,14 @@ export function ProductsPage() {
             className="input"
             value={form.colors}
             onChange={(e) => setForm((f) => ({ ...f, colors: e.target.value }))}
+          />
+        </label>
+        <label className="label">
+          Tags (comma-separated)
+          <input
+            className="input"
+            value={form.tags}
+            onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
           />
         </label>
         {saveProduct.isError ? (
