@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Plus, Edit } from 'lucide-react';
+import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { validateImage } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
@@ -12,6 +12,78 @@ export function ContentPage() {
     queryKey: ['content', api.base],
     queryFn: () => api.get('/content/home'),
   });
+  const [categoryForm, setCategoryForm] = useState({ name: '', imageUrl: '', sortOrder: 0 });
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
+
+  const [promoForm, setPromoForm] = useState({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0 });
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [editingPromo, setEditingPromo] = useState(null);
+
+  const createCategory = useMutation({
+    mutationFn: () =>
+      editingCategory
+        ? api.patch(`/content/categories/${editingCategory.id}`, categoryForm)
+        : api.post('/content/categories', categoryForm),
+    onSuccess: () => {
+      setCategoryForm({ name: '', imageUrl: '', sortOrder: 0 });
+      setEditingCategory(null);
+      setShowCategoryModal(false);
+      qc.invalidateQueries({ queryKey: ['content', api.base] });
+    },
+  });
+
+  const createPromo = useMutation({
+    mutationFn: () =>
+      editingPromo ? api.patch(`/content/promos/${editingPromo.id}`, promoForm) : api.post('/content/promos', promoForm),
+    onSuccess: () => {
+      setPromoForm({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0 });
+      setEditingPromo(null);
+      setShowPromoModal(false);
+      qc.invalidateQueries({ queryKey: ['content', api.base] });
+    },
+  });
+
+  const uploadCategoryImage = useMutation({
+    mutationFn: async (file) => {
+      await validateImage(file);
+      const res = await api.upload('/upload', file);
+      return res.file?.url || res.file?.path;
+    },
+    onSuccess: (url) => setCategoryForm((f) => ({ ...f, imageUrl: url || f.imageUrl })),
+  });
+
+  const uploadPromoImage = useMutation({
+    mutationFn: async (file) => {
+      await validateImage(file);
+      const res = await api.upload('/upload', file);
+      return res.file?.url || res.file?.path;
+    },
+    onSuccess: (url) => setPromoForm((f) => ({ ...f, imageUrl: url || f.imageUrl })),
+  });
+
+  const handleCategoryImage = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadCategoryImage.mutate(file);
+  };
+
+  const handlePromoImage = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadPromoImage.mutate(file);
+  };
+
+  const handleCategorySubmit = (e) => {
+    e.preventDefault();
+    createCategory.mutate();
+  };
+
+  const handlePromoSubmit = (e) => {
+    e.preventDefault();
+    createPromo.mutate();
+  };
+
   const [tagForm, setTagForm] = useState({ name: '', sortOrder: 0 });
   const [showTagModal, setShowTagModal] = useState(false);
   const [editingTag, setEditingTag] = useState(null);
