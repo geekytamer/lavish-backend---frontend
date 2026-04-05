@@ -199,18 +199,26 @@ router.get('/products', (req, res) => {
       `SELECT * FROM products ${vendorFilter} LIMIT ? OFFSET ?`,
       req.query.vendorId ? [req.query.vendorId, limit, offset] : [limit, offset],
     );
-    const parsed = rows.map((row) => ({
-      ...row,
-      sizes: row.sizes ? JSON.parse(row.sizes) : [],
-      colors: row.colors ? JSON.parse(row.colors) : [],
-      imageUrl: resolveUrl(
-        req,
-        row.imageUrl ||
-        row.image_url ||
-        fallbackImages[row.id] ||
-        'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=60',
-      ),
-    }));
+    const parsed = rows.map((row) => {
+      let gallery = [];
+      try {
+        gallery = row.gallery ? JSON.parse(row.gallery) : [];
+      } catch (e) { }
+      return {
+        ...row,
+        sizes: row.sizes ? JSON.parse(row.sizes) : [],
+        colors: row.colors ? JSON.parse(row.colors) : [],
+        tags: row.tags ? JSON.parse(row.tags) : [],
+        gallery: gallery.map(g => resolveUrl(req, g)),
+        imageUrl: resolveUrl(
+          req,
+          row.imageUrl ||
+          row.image_url ||
+          fallbackImages[row.id] ||
+          'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=800&q=60'
+        ),
+      };
+    });
     const total = totalRow?.count || 0;
     res.json({
       products: parsed,

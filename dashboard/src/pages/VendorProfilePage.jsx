@@ -10,17 +10,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { Modal } from '../components/Modal.jsx';
 
-const VENDOR_CATEGORIES = [
-  'Womenswear',
-  'Menswear',
-  'Streetwear',
-  'Accessories',
-  'Evening',
-  'Athleisure',
-  'Denim',
-  'Footwear',
-  'Luxury',
-];
+// dynamic vendor tags now sourced from api
 
 export function VendorProfilePage() {
   const { id: routeId } = useParams();
@@ -74,6 +64,13 @@ export function VendorProfilePage() {
     queryKey: ['vendor-profile', api.base, resolvedId],
     queryFn: () => api.get(`/vendors/${resolvedId}/profile`),
   });
+
+  const tagsQuery = useQuery({
+    queryKey: ['vendor-tags', api.base],
+    queryFn: () => api.get('/content/vendor-tags').then((d) => d.tags || []),
+  });
+  const availableTags = tagsQuery.data || [];
+
   const data = profile.data || { vendor: {}, stats: {}, products: [], receipts: [], payouts: [] };
 
   const weekly = useMemo(() => weeklyBuckets(data.receipts), [data.receipts]);
@@ -189,7 +186,11 @@ export function VendorProfilePage() {
           <label className="label">
             Brand Categorization
             <div className="flex-wrap mt-xs" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {VENDOR_CATEGORIES.map((tag) => {
+              {availableTags.length === 0 ? (
+                <span className="muted xs">No vendor tags have been added to the system yet.</span>
+              ) : null}
+              {availableTags.map((tagObj) => {
+                const tag = tagObj.name;
                 const active = editForm.tags.includes(tag);
                 return (
                   <button

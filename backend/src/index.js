@@ -20,6 +20,7 @@ const couponRoutes = require('./routes/coupons');
 const reviewRoutes = require('./routes/reviews');
 const addressRoutes = require('./routes/addresses');
 const analyticsRoutes = require('./routes/analytics');
+const userRoutes = require('./routes/users');
 
 async function start() {
   await db.ready;
@@ -49,6 +50,7 @@ async function start() {
   app.use('/api/reviews', reviewRoutes);
   app.use('/api/addresses', addressRoutes);
   app.use('/api/analytics', analyticsRoutes);
+  app.use('/api/users', userRoutes);
 
   // Open vendor deep link (share URL)
   app.get('/open/vendor/:id', (req, res) => {

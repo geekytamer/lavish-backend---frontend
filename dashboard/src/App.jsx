@@ -11,6 +11,7 @@ import { ContentPage } from './pages/ContentPage.jsx';
 import { CouponsPage } from './pages/CouponsPage.jsx';
 import { ReviewsPage } from './pages/ReviewsPage.jsx';
 import { AnalyticsPage } from './pages/AnalyticsPage.jsx';
+import { UsersPage } from './pages/UsersPage.jsx';
 import { useApp } from './context/AppContext.jsx';
 
 function RequireAuth() {
@@ -44,6 +45,7 @@ function App() {
             {isVendor ? null : <Route path="/content" element={<ContentPage />} />}
             {isVendor ? null : <Route path="/coupons" element={<CouponsPage />} />}
             {isVendor ? null : <Route path="/reviews" element={<ReviewsPage />} />}
+            {isVendor ? null : <Route path="/users" element={<UsersPage />} />}
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="*" element={<Navigate to={isVendor ? '/vendor/profile' : '/'} replace />} />
           </Route>

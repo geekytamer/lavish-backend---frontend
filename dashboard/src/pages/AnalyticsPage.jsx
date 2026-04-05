@@ -16,18 +16,15 @@ export function AnalyticsPage() {
     const products = analytics.data?.products || [];
     const vendors = analytics.data?.vendors || [];
 
-    const totalProductViews = products.reduce((acc, p) => acc + (p.views || 0), 0);
     const totalProductClicks = products.reduce((acc, p) => acc + (p.clicks || 0), 0);
     const totalProductCarts = products.reduce((acc, p) => acc + (p.carts || 0), 0);
-    const totalVendorViews = vendors.reduce((acc, v) => acc + (v.views || 0), 0);
+    // Profile views could also be removed, but we'll remove it per the "remove views" generic request.
 
     return (
         <div className="stack gap-lg">
-            <div className="grid cards-4 gap-md">
-                <StatCard label="Product Views" value={totalProductViews} hint="Total product impressions" />
-                <StatCard label="Product Clicks" value={totalProductClicks} hint="Total product interactions" />
+            <div className="grid cards-2 gap-md">
+                <StatCard label="Product Clicks" value={totalProductClicks} hint="Total product taps" />
                 <StatCard label="Add to Carts" value={totalProductCarts} hint="Total products added to cart" />
-                <StatCard label="Profile Views" value={totalVendorViews} hint="Total vendor profile visits" />
             </div>
 
             <div className="card">
@@ -40,19 +37,17 @@ export function AnalyticsPage() {
                 <div className="table">
                     <div className="table-head">
                         <span>Product</span>
-                        <span>Views</span>
                         <span>Clicks</span>
-                        <span>Shares</span>
                         <span>Likes</span>
+                        <span>Shares</span>
                         <span>Carts</span>
                     </div>
                     {products.map(product => (
                         <div key={product.id} className="table-row">
                             <span className="truncate">{product.name}</span>
-                            <span className="mono subtle">{product.views || 0}</span>
                             <span className="mono subtle">{product.clicks || 0}</span>
-                            <span className="mono subtle">{product.shares || 0}</span>
                             <span className="mono subtle">{product.likes || 0}</span>
+                            <span className="mono subtle">{product.shares || 0}</span>
                             <span className="mono subtle">{product.carts || 0}</span>
                         </div>
                     ))}
@@ -73,7 +68,6 @@ export function AnalyticsPage() {
                     <div className="table">
                         <div className="table-head">
                             <span>Vendor</span>
-                            <span>Profile Views</span>
                             <span>Clicks</span>
                             <span>Shares</span>
                             <span />
@@ -82,7 +76,6 @@ export function AnalyticsPage() {
                         {vendors.map(vendor => (
                             <div key={vendor.id} className="table-row">
                                 <span className="truncate">{vendor.name}</span>
-                                <span className="mono subtle">{vendor.views || 0}</span>
                                 <span className="mono subtle">{vendor.clicks || 0}</span>
                                 <span className="mono subtle">{vendor.shares || 0}</span>
                                 <span />

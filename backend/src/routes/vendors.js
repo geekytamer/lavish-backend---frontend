@@ -61,7 +61,7 @@ router.post('/', requireAuth(['admin']), async (req, res) => {
     // 4. Send Credentials Email via Resend
     try {
       await resend.emails.send({
-        from: 'Lavish Fashion <onboarding@resend.dev>', // Use verified domain in production
+        from: 'Lavish Fashion <onboarding@lavishlook.app>', // Use verified domain in production
         to: email,
         subject: 'Welcome to Lavish - Your Vendor Credentials',
         html: `

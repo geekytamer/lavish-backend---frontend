@@ -304,6 +304,9 @@ export function VendorsPage() {
             <label className="label">
               Category Focus
               <div className="flex-wrap" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {availableTags.length === 0 ? (
+                  <span className="muted xs">No vendor tags added to the system yet. Go to Content tab.</span>
+                ) : null}
                 {availableTags.map((tagObj) => {
                   const tag = tagObj.name;
                   const active = selectedTags.includes(tag);

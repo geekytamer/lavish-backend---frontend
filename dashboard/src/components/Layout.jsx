@@ -12,6 +12,7 @@ import {
   Tag,
   MessageSquare,
   Activity,
+  Users,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 
@@ -24,6 +25,7 @@ const adminNav = [
   { to: '/content', label: 'Content', icon: Megaphone },
   { to: '/coupons', label: 'Coupons', icon: Tag },
   { to: '/reviews', label: 'Reviews', icon: MessageSquare },
+  { to: '/users', label: 'Users', icon: Users },
   { to: '/analytics', label: 'Analytics', icon: Activity },
 ];
 
@@ -41,6 +43,7 @@ const titles = {
   '/products': 'Products',
   '/payouts': 'Payouts',
   '/content': 'Content',
+  '/users': 'Users',
   '/analytics': 'Analytics',
 };
 

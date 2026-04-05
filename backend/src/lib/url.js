@@ -9,6 +9,9 @@ function baseUrlForRequest(req) {
 
 function resolveUrl(req, value) {
   if (!value) return '';
+  if (value.startsWith('photo-')) {
+    return `https://images.unsplash.com/${value}`;
+  }
   const base = baseUrlForRequest(req);
   try {
     const url = new URL(value, base);
