@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Tag } from 'lucide-react';
+import { Plus, Trash2, Tag, Edit } from 'lucide-react';
 import { useState } from 'react';
 import { useApiClient } from '../lib/api.js';
 import { Modal } from '../components/Modal.jsx';
@@ -9,6 +9,7 @@ export function CouponsPage() {
     const api = useApiClient();
     const qc = useQueryClient();
     const [showModal, setShowModal] = useState(false);
+    const [editing, setEditing] = useState(null);
     const [form, setForm] = useState({
         code: '',
         discount_type: 'percentage',
@@ -23,9 +24,13 @@ export function CouponsPage() {
     });
 
     const saveCoupon = useMutation({
-        mutationFn: (payload) => api.post('/coupons', payload),
+        mutationFn: (payload) => {
+            if (editing) return api.patch(`/coupons/${editing.id}`, payload);
+            return api.post('/coupons', payload);
+        },
         onSuccess: () => {
             setShowModal(false);
+            setEditing(null);
             setForm({ code: '', discount_type: 'percentage', discount_value: '', min_purchase: '0', expiry_date: '' });
             qc.invalidateQueries({ queryKey: ['coupons', api.base] });
         },
@@ -53,7 +58,11 @@ export function CouponsPage() {
                         <p className="eyebrow">Marketing</p>
                         <h3>Promo Codes</h3>
                     </div>
-                    <button className="btn primary small" onClick={() => setShowModal(true)}>
+                    <button className="btn primary small" onClick={() => {
+                        setEditing(null);
+                        setForm({ code: '', discount_type: 'percentage', discount_value: '', min_purchase: '0', expiry_date: '' });
+                        setShowModal(true);
+                    }}>
                         <Plus size={14} /> New Code
                     </button>
                 </div>
@@ -82,7 +91,23 @@ export function CouponsPage() {
                                     {c.active ? 'Active' : 'Inactive'}
                                 </span>
                             </span>
-                            <span>
+                            <span className="inline gap-sm">
+                                <button
+                                    className="icon-btn"
+                                    onClick={() => {
+                                        setEditing(c);
+                                        setForm({
+                                            code: c.code || '',
+                                            discount_type: c.discount_type || 'percentage',
+                                            discount_value: c.discount_value || '',
+                                            min_purchase: c.min_purchase || '0',
+                                            expiry_date: c.expiry_date ? c.expiry_date.split('T')[0] : '',
+                                        });
+                                        setShowModal(true);
+                                    }}
+                                >
+                                    <Edit size={14} />
+                                </button>
                                 <button
                                     className="icon-btn danger"
                                     onClick={() => {
@@ -103,13 +128,19 @@ export function CouponsPage() {
 
             <Modal
                 open={showModal}
-                title="Create Promo Code"
-                onClose={() => setShowModal(false)}
+                title={editing ? "Edit Promo Code" : "Create Promo Code"}
+                onClose={() => {
+                    setShowModal(false);
+                    setEditing(null);
+                }}
                 footer={
                     <>
-                        <button className="btn ghost" onClick={() => setShowModal(false)}>Cancel</button>
+                        <button className="btn ghost" onClick={() => {
+                            setShowModal(false);
+                            setEditing(null);
+                        }}>Cancel</button>
                         <button className="btn primary" onClick={handleSubmit} disabled={saveCoupon.isPending}>
-                            Create Code
+                            {editing ? "Save Code" : "Create Code"}
                         </button>
                     </>
                 }

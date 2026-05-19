@@ -317,6 +317,7 @@ function ensureColumns() {
     "ALTER TABLE vendors ADD COLUMN shares INTEGER DEFAULT 0",
     "ALTER TABLE coupons ADD COLUMN id TEXT",
     "ALTER TABLE coupons ADD COLUMN vendor_id TEXT",
+    "ALTER TABLE promos ADD COLUMN location TEXT DEFAULT 'home'",
   ];
   statements.forEach((sql) => {
     try {

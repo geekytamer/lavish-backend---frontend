@@ -38,4 +38,14 @@ router.post('/', (req, res) => {
     res.json({ id, createdAt });
 });
 
+router.delete('/:id', requireAuth(['admin']), (req, res) => {
+    try {
+        const db = req.app.locals.db;
+        db.run('DELETE FROM reviews WHERE id = ?', [req.params.id]);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

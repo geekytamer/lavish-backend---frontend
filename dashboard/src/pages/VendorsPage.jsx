@@ -18,6 +18,7 @@ export function VendorsPage() {
   const [logoPreview, setLogoPreview] = useState(null);
   const [selectedTags, setSelectedTags] = useState([]);
   const [search, setSearch] = useState('');
+  const [customTag, setCustomTag] = useState('');
 
   const toggleTag = (tag) => {
     setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
@@ -307,8 +308,7 @@ export function VendorsPage() {
                 {availableTags.length === 0 ? (
                   <span className="muted xs">No vendor tags added to the system yet. Go to Content tab.</span>
                 ) : null}
-                {availableTags.map((tagObj) => {
-                  const tag = tagObj.name;
+                {Array.from(new Set([...availableTags.map(t => t.name), ...selectedTags])).map((tag) => {
                   const active = selectedTags.includes(tag);
                   return (
                     <button
@@ -325,6 +325,38 @@ export function VendorsPage() {
                     </button>
                   );
                 })}
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Add custom tag..."
+                  value={customTag}
+                  onChange={(e) => setCustomTag(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = customTag.trim();
+                      if (val && !selectedTags.includes(val)) {
+                        setSelectedTags([...selectedTags, val]);
+                      }
+                      setCustomTag('');
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => {
+                    const val = customTag.trim();
+                    if (val && !selectedTags.includes(val)) {
+                      setSelectedTags([...selectedTags, val]);
+                    }
+                    setCustomTag('');
+                  }}
+                >
+                  Add
+                </button>
               </div>
             </label>
             {saveVendor.isError ? <p className="error">Could not save vendor.</p> : null}

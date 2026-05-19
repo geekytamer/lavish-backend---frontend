@@ -43,22 +43,22 @@ router.get('/promos', (req, res) => {
 });
 
 router.post('/promos', requireAuth(['admin']), (req, res) => {
-  const { title, subtitle, imageUrl, cta, link, sortOrder = 0, active = true } = req.body || {};
+  const { title, subtitle, imageUrl, cta, link, sortOrder = 0, active = true, location = 'home' } = req.body || {};
   if (!title) return res.status(400).json({ error: 'Title required' });
   const db = req.app.locals.db;
   db.run(
-    'INSERT INTO promos (id, title, subtitle, image_url, cta, link, sort_order, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [uuid(), title, subtitle || '', imageUrl || '', cta || '', link || '', sortOrder, active ? 1 : 0],
+    'INSERT INTO promos (id, title, subtitle, image_url, cta, link, sort_order, active, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [uuid(), title, subtitle || '', imageUrl || '', cta || '', link || '', sortOrder, active ? 1 : 0, location],
   );
   res.status(201).json({ ok: true });
 });
 
 router.patch('/promos/:id', requireAuth(['admin']), (req, res) => {
-  const { title, subtitle, imageUrl, cta, link, sortOrder, active } = req.body || {};
+  const { title, subtitle, imageUrl, cta, link, sortOrder, active, location } = req.body || {};
   const db = req.app.locals.db;
   db.run(
-    'UPDATE promos SET title = COALESCE(?, title), subtitle = COALESCE(?, subtitle), image_url = COALESCE(?, image_url), cta = COALESCE(?, cta), link = COALESCE(?, link), sort_order = COALESCE(?, sort_order), active = COALESCE(?, active) WHERE id = ?',
-    [title, subtitle, imageUrl, cta, link, sortOrder, active == null ? null : (active ? 1 : 0), req.params.id],
+    'UPDATE promos SET title = COALESCE(?, title), subtitle = COALESCE(?, subtitle), image_url = COALESCE(?, image_url), cta = COALESCE(?, cta), link = COALESCE(?, link), sort_order = COALESCE(?, sort_order), active = COALESCE(?, active), location = COALESCE(?, location) WHERE id = ?',
+    [title, subtitle, imageUrl, cta, link, sortOrder, active == null ? null : (active ? 1 : 0), location, req.params.id],
   );
   res.json({ ok: true });
 });

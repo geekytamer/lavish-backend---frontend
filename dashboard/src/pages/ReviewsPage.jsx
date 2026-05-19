@@ -1,10 +1,16 @@
-import { useQuery } from '@tanstack/react-query';
-import { Star, User, MessageSquare } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Star, User, MessageSquare, Trash2 } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { formatDateTime } from '../lib/formatters.jsx';
 
 export function ReviewsPage() {
     const api = useApiClient();
+    const qc = useQueryClient();
+
+    const deleteReview = useMutation({
+        mutationFn: (id) => api.del(`/reviews/${id}`),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['reviews', api.base] }),
+    });
 
     const reviews = useQuery({
         queryKey: ['reviews', api.base],
@@ -29,7 +35,18 @@ export function ReviewsPage() {
                                     <div className="avatar small">{rev.user_name?.[0] || 'A'}</div>
                                     <strong>{rev.user_name || 'Anonymous'}</strong>
                                 </div>
-                                <div className="pill info mono xs">{rev.rating} ★</div>
+                                <div className="inline gap-sm">
+                                    <div className="pill info mono xs">{rev.rating} ★</div>
+                                    <button
+                                        className="icon-btn danger"
+                                        title="Delete review"
+                                        onClick={() => {
+                                            if (window.confirm('Delete this review?')) deleteReview.mutate(rev.id);
+                                        }}
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
                             </div>
                             <p className="description" style={{ fontSize: '14px', fontStyle: 'italic' }}>
                                 "{rev.comment || 'No comment provided.'}"

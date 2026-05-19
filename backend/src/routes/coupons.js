@@ -44,6 +44,36 @@ router.post('/', requireAuth(['admin', 'vendor']), (req, res) => {
     }
 });
 
+router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
+    try {
+        const { code, discount_type, discount_value, min_purchase, expiry_date, active } = req.body || {};
+        const db = req.app.locals.db;
+
+        if (req.user.role === 'vendor') {
+            const existing = db.get('SELECT * FROM coupons WHERE id = ? AND vendor_id = ?', [req.params.id, req.user.vendorId]);
+            if (!existing) return res.status(403).json({ error: 'Not authorized' });
+        }
+
+        const updates = [];
+        const params = [];
+
+        if (code !== undefined) { updates.push('code = ?'); params.push(code.toUpperCase()); }
+        if (discount_type !== undefined) { updates.push('discount_type = ?'); params.push(discount_type); }
+        if (discount_value !== undefined) { updates.push('discount_value = ?'); params.push(Number(discount_value)); }
+        if (min_purchase !== undefined) { updates.push('min_purchase = ?'); params.push(Number(min_purchase)); }
+        if (expiry_date !== undefined) { updates.push('expiry_date = ?'); params.push(expiry_date || null); }
+        if (active !== undefined) { updates.push('active = ?'); params.push(active ? 1 : 0); }
+
+        if (updates.length === 0) return res.json({ ok: true });
+
+        params.push(req.params.id);
+        db.run(`UPDATE coupons SET ${updates.join(', ')} WHERE id = ?`, params);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.delete('/:id', requireAuth(['admin']), (req, res) => {
     try {
         const db = req.app.locals.db;

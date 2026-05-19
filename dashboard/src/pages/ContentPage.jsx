@@ -16,7 +16,7 @@ export function ContentPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
 
-  const [promoForm, setPromoForm] = useState({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0 });
+  const [promoForm, setPromoForm] = useState({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0, location: 'home' });
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [editingPromo, setEditingPromo] = useState(null);
 
@@ -33,15 +33,25 @@ export function ContentPage() {
     },
   });
 
+  const deleteCategory = useMutation({
+    mutationFn: (id) => api.del(`/content/categories/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['content', api.base] }),
+  });
+
   const createPromo = useMutation({
     mutationFn: () =>
       editingPromo ? api.patch(`/content/promos/${editingPromo.id}`, promoForm) : api.post('/content/promos', promoForm),
     onSuccess: () => {
-      setPromoForm({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0 });
+      setPromoForm({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0, location: 'home' });
       setEditingPromo(null);
       setShowPromoModal(false);
       qc.invalidateQueries({ queryKey: ['content', api.base] });
     },
+  });
+
+  const deletePromo = useMutation({
+    mutationFn: (id) => api.del(`/content/promos/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['content', api.base] }),
   });
 
   const uploadCategoryImage = useMutation({
@@ -151,7 +161,7 @@ export function ContentPage() {
                 <span>{category.name}</span>
                 <span className="mono">{category.image_url || category.imageUrl || '—'}</span>
                 <span>{category.sort_order ?? category.sortOrder ?? 0}</span>
-                <span>
+                <span className="inline gap-sm">
                   <button
                     className="icon-btn"
                     onClick={() => {
@@ -165,6 +175,14 @@ export function ContentPage() {
                     }}
                   >
                     <Edit size={14} />
+                  </button>
+                  <button
+                    className="icon-btn danger"
+                    onClick={() => {
+                      if (window.confirm('Delete this category?')) deleteCategory.mutate(category.id);
+                    }}
+                  >
+                    <Trash2 size={14} />
                   </button>
                 </span>
               </div>
@@ -238,7 +256,7 @@ export function ContentPage() {
             className="btn primary small"
             onClick={() => {
               setEditingPromo(null);
-              setPromoForm({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0 });
+              setPromoForm({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0, location: 'home' });
               setShowPromoModal(true);
             }}
           >
@@ -249,6 +267,7 @@ export function ContentPage() {
           <div className="table-head">
             <span>Title</span>
             <span>Subtitle</span>
+            <span>Location</span>
             <span>Sort</span>
             <span />
           </div>
@@ -256,8 +275,9 @@ export function ContentPage() {
             <div key={promo.id} className="table-row">
               <span>{promo.title}</span>
               <span className="muted xs">{promo.subtitle}</span>
+              <span className="pill subtle mono xs">{promo.location || 'home'}</span>
               <span>{promo.sort_order ?? promo.sortOrder ?? 0}</span>
-              <span>
+              <span className="inline gap-sm">
                 <button
                   className="icon-btn"
                   onClick={() => {
@@ -269,11 +289,20 @@ export function ContentPage() {
                       cta: promo.cta || '',
                       link: promo.link || '',
                       sortOrder: promo.sort_order ?? promo.sortOrder ?? 0,
+                      location: promo.location || 'home',
                     });
                     setShowPromoModal(true);
                   }}
                 >
                   <Edit size={14} />
+                </button>
+                <button
+                  className="icon-btn danger"
+                  onClick={() => {
+                    if (window.confirm('Delete this promo?')) deletePromo.mutate(promo.id);
+                  }}
+                >
+                  <Trash2 size={14} />
                 </button>
               </span>
             </div>
@@ -405,6 +434,17 @@ export function ContentPage() {
             value={promoForm.subtitle}
             onChange={(e) => setPromoForm((f) => ({ ...f, subtitle: e.target.value }))}
           />
+        </label>
+        <label className="label">
+          Banner Location
+          <select
+            className="input"
+            value={promoForm.location}
+            onChange={(e) => setPromoForm((f) => ({ ...f, location: e.target.value }))}
+          >
+            <option value="home">Home Page</option>
+            <option value="brands">Brands Page</option>
+          </select>
         </label>
         <label className="label">
           Image URL

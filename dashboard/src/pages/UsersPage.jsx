@@ -29,10 +29,10 @@ export function UsersPage() {
         mutationFn: async () => {
             const payload = {
                 email: form.email,
-                password: form.password,
                 role: form.role,
                 vendorId: form.vendorId,
             };
+            if (form.password) payload.password = form.password;
             if (editing) {
                 return api.patch(`/users/${editing.id}`, payload);
             }
