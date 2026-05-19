@@ -303,60 +303,77 @@ export function VendorsPage() {
               />
             </label>
             <label className="label">
-              Category Focus
-              <div className="flex-wrap" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {availableTags.length === 0 ? (
-                  <span className="muted xs">No vendor tags added to the system yet. Go to Content tab.</span>
-                ) : null}
-                {Array.from(new Set([...availableTags.map(t => t.name), ...selectedTags])).map((tag) => {
-                  const active = selectedTags.includes(tag);
-                  return (
+              Tags
+              {selectedTags.length > 0 && (
+                <div className="flex-wrap" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                  {selectedTags.map((tag) => (
                     <button
                       key={tag}
                       type="button"
-                      className={`pill ${active ? 'primary' : 'subtle'} clickable`}
+                      className="pill primary clickable"
                       onClick={(e) => {
                         e.preventDefault();
                         toggleTag(tag);
                       }}
-                      style={{ border: 'none', cursor: 'pointer' }}
+                      style={{ border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
                       {tag}
+                      <span style={{ opacity: 0.6, fontSize: '14px', lineHeight: 1 }}>×</span>
                     </button>
-                  );
-                })}
-              </div>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Add custom tag..."
-                  value={customTag}
-                  onChange={(e) => setCustomTag(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
+                  ))}
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <select 
+                  className="input" 
+                  style={{ flex: '1 1 150px' }}
+                  value=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val && !selectedTags.includes(val)) {
+                      setSelectedTags([...selectedTags, val]);
+                    }
+                  }}
+                >
+                  <option value="" disabled>Select global tag...</option>
+                  {availableTags.map(t => (
+                     <option key={t.id} value={t.name}>{t.name}</option>
+                  ))}
+                </select>
+                
+                <div style={{ display: 'flex', gap: '8px', flex: '1 1 200px' }}>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="or type custom tag..."
+                    value={customTag}
+                    onChange={(e) => setCustomTag(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = customTag.trim();
+                        if (val && !selectedTags.includes(val)) {
+                          setSelectedTags([...selectedTags, val]);
+                        }
+                        setCustomTag('');
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn ghost small"
+                    onClick={() => {
                       const val = customTag.trim();
                       if (val && !selectedTags.includes(val)) {
                         setSelectedTags([...selectedTags, val]);
                       }
                       setCustomTag('');
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn ghost small"
-                  onClick={() => {
-                    const val = customTag.trim();
-                    if (val && !selectedTags.includes(val)) {
-                      setSelectedTags([...selectedTags, val]);
-                    }
-                    setCustomTag('');
-                  }}
-                >
-                  Add
-                </button>
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
               </div>
             </label>
             {saveVendor.isError ? <p className="error">Could not save vendor.</p> : null}
