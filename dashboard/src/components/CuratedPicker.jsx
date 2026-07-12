@@ -27,7 +27,7 @@ export function CuratedPicker({ options, value, onChange, getLabel = (o) => o.na
       {selected.length === 0 ? (
         <p className="muted xs">{emptyHint || 'Nothing selected yet.'}</p>
       ) : (
-        <div className="stack gap-sm">
+        <div className="stack gap-sm curated-list">
           {selected.map((id, i) => {
             const item = byId(id);
             return (

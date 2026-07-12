@@ -92,16 +92,22 @@ router.post('/', requireAuth(['admin']), async (req, res) => {
   }
 });
 
-router.patch('/:id', requireAuth(['admin']), (req, res) => {
+router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
   const { name, description, rating, tags, logo_url, cover_image_url } = req.body || {};
   try {
     const db = req.app.locals.db;
+    // A vendor may only edit their OWN brand, and may not set their own rating.
+    const isVendor = req.user?.role === 'vendor';
+    if (isVendor && req.user.vendorId !== req.params.id) {
+      return res.status(403).json({ error: 'You can only edit your own brand.' });
+    }
     // Coerce any omitted field to null — sql.js throws on `undefined` bindings,
     // so a partial PATCH would otherwise 500.
     const nz = (v) => (v === undefined ? null : v);
+    const ratingVal = isVendor ? null : (rating == null ? null : Number(rating));
     db.run(
       'UPDATE vendors SET name = COALESCE(?, name), description = COALESCE(?, description), rating = COALESCE(?, rating), tags = COALESCE(?, tags), logo_url = COALESCE(?, logo_url), cover_image_url = COALESCE(?, cover_image_url) WHERE id = ?',
-      [nz(name), nz(description), rating == null ? null : Number(rating), tags ? JSON.stringify(tags) : null, logo_url || null, cover_image_url || null, req.params.id],
+      [nz(name), nz(description), ratingVal, tags ? JSON.stringify(tags) : null, logo_url || null, cover_image_url || null, req.params.id],
     );
     const updated = db.get('SELECT * FROM vendors WHERE id = ?', [req.params.id]);
     if (!updated) return res.status(404).json({ error: 'Vendor not found' });

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo } from 'react';
 import { ArrowLeft, Plus, Edit, Camera, Save, X } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
+import { validateImage, IMAGE_SPECS } from '../lib/images.js';
 import { formatCurrency, formatDateTime, weeklyBuckets } from '../lib/formatters.jsx';
 import { StatusPill } from '../components/StatusPill.jsx';
 import { StatCard } from '../components/StatCard.jsx';
@@ -16,9 +17,13 @@ export function VendorProfilePage() {
   const { id: routeId } = useParams();
   // ...
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editForm, setEditForm] = useState({ name: '', description: '', tags: [], logo_url: '' });
+  const [editForm, setEditForm] = useState({ name: '', description: '', tags: [], logo_url: '', cover_image_url: '' });
   const [pendingLogo, setPendingLogo] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
+  const [pendingCover, setPendingCover] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [imageError, setImageError] = useState('');
+  const [customTag, setCustomTag] = useState('');
 
   const startEdit = () => {
     setEditForm({
@@ -26,8 +31,39 @@ export function VendorProfilePage() {
       description: data.vendor.description || '',
       tags: data.vendor.tags || [],
       logo_url: data.vendor.logo_url || '',
+      cover_image_url: data.vendor.cover_image_url || '',
     });
+    setPendingLogo(null);
+    setLogoPreview(null);
+    setPendingCover(null);
+    setCoverPreview(null);
+    setImageError('');
+    setCustomTag('');
     setShowEditModal(true);
+  };
+
+  const handleLogoSelect = async (file) => {
+    if (!file) return;
+    setImageError('');
+    try {
+      await validateImage(file, { ...IMAGE_SPECS.logo, label: 'Logo' });
+      setPendingLogo(file);
+      setLogoPreview(URL.createObjectURL(file));
+    } catch (err) {
+      setImageError(err.message);
+    }
+  };
+
+  const handleCoverSelect = async (file) => {
+    if (!file) return;
+    setImageError('');
+    try {
+      await validateImage(file, { ...IMAGE_SPECS.cover, label: 'Header image' });
+      setPendingCover(file);
+      setCoverPreview(URL.createObjectURL(file));
+    } catch (err) {
+      setImageError(err.message);
+    }
   };
 
   const updateVendor = useMutation({
@@ -37,12 +73,19 @@ export function VendorProfilePage() {
         const res = await api.upload('/upload', pendingLogo);
         logoUrl = res.file?.url || res.file?.path;
       }
-      return api.patch(`/vendors/${resolvedId}`, { ...payload, logo_url: logoUrl });
+      let coverUrl = payload.cover_image_url;
+      if (pendingCover) {
+        const res = await api.upload('/upload', pendingCover);
+        coverUrl = res.file?.url || res.file?.path;
+      }
+      return api.patch(`/vendors/${resolvedId}`, { ...payload, logo_url: logoUrl, cover_image_url: coverUrl });
     },
     onSuccess: () => {
       setShowEditModal(false);
       setPendingLogo(null);
       setLogoPreview(null);
+      setPendingCover(null);
+      setCoverPreview(null);
       qc.invalidateQueries({ queryKey: ['vendor-profile', api.base, resolvedId] });
     },
   });
@@ -53,9 +96,18 @@ export function VendorProfilePage() {
       tags: prev.tags.includes(tag) ? prev.tags.filter((t) => t !== tag) : [...prev.tags, tag],
     }));
   };
+
+  const addCustomTag = () => {
+    const val = customTag.trim();
+    if (!val) return;
+    setEditForm((prev) => ({
+      ...prev,
+      tags: prev.tags.includes(val) ? prev.tags : [...prev.tags, val],
+    }));
+    setCustomTag('');
+  };
   const { role, vendorId } = useApp();
   const resolvedId = routeId || vendorId;
-  if (!resolvedId) return <Navigate to="/login" replace />;
   const api = useApiClient();
   const qc = useQueryClient();
   const [payoutAmount, setPayoutAmount] = useState('');
@@ -74,10 +126,7 @@ export function VendorProfilePage() {
   const data = profile.data || { vendor: {}, stats: {}, products: [], receipts: [], payouts: [] };
 
   const weekly = useMemo(() => weeklyBuckets(data.receipts), [data.receipts]);
-  const weeklyMax = useMemo(
-    () => Math.max(...weekly.map((w) => Number(w.total || 0)), 1),
-    [weekly],
-  );
+  const weeklyMax = Math.max(...weekly.map((w) => Number(w.total || 0)), 1);
 
   const createPayout = useMutation({
     mutationFn: () => api.post('/payouts', { vendorId: resolvedId, amount: Number(payoutAmount || 0) }),
@@ -87,6 +136,8 @@ export function VendorProfilePage() {
       qc.invalidateQueries({ queryKey: ['payouts', api.base] });
     },
   });
+
+  if (!resolvedId) return <Navigate to="/login" replace />;
 
   return (
     <div className="stack gap-lg">
@@ -144,6 +195,28 @@ export function VendorProfilePage() {
       >
         <div className="stack gap-md">
           <label className="label">
+            Brand Header Image
+            <div className="inline gap-md">
+              <button className="upload-btn" onClick={() => document.getElementById('vendor-cover-file').click()}>
+                <Camera size={14} /> Change Header
+              </button>
+              <input
+                id="vendor-cover-file"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                onChange={(e) => handleCoverSelect(e.target.files[0])}
+              />
+            </div>
+            {(coverPreview || editForm.cover_image_url) && (
+              <div className="preview" style={{ aspectRatio: '3 / 1', width: '100%', overflow: 'hidden', borderRadius: 12, marginTop: 8 }}>
+                <img src={coverPreview || editForm.cover_image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            )}
+            <span className="muted xs">{IMAGE_SPECS.cover.hint} Shown as the banner on your brand page.</span>
+          </label>
+
+          <label className="label">
             Store Logo
             <div className="inline gap-md">
               <button className="upload-btn" onClick={() => document.getElementById('vendor-logo-file').click()}>
@@ -155,17 +228,16 @@ export function VendorProfilePage() {
               <input
                 id="vendor-logo-file"
                 type="file"
+                accept="image/jpeg,image/png,image/webp"
                 hidden
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  if (file) {
-                    setPendingLogo(file);
-                    setLogoPreview(URL.createObjectURL(file));
-                  }
-                }}
+                onChange={(e) => handleLogoSelect(e.target.files[0])}
               />
             </div>
+            <span className="muted xs">{IMAGE_SPECS.logo.hint}</span>
           </label>
+
+          {imageError ? <p className="error">{imageError}</p> : null}
+
           <label className="label">
             Display Name
             <input
@@ -185,27 +257,59 @@ export function VendorProfilePage() {
           </label>
           <label className="label">
             Brand Categorization
-            <div className="flex-wrap mt-xs" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {availableTags.length === 0 ? (
-                <span className="muted xs">No vendor tags have been added to the system yet.</span>
-              ) : null}
-              {availableTags.map((tagObj) => {
-                const tag = tagObj.name;
-                const active = editForm.tags.includes(tag);
-                return (
+            {editForm.tags.length > 0 && (
+              <div className="flex-wrap" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: 8 }}>
+                {editForm.tags.map((tag) => (
                   <button
                     key={tag}
                     type="button"
-                    className={`pill ${active ? 'primary' : 'subtle'} clickable`}
+                    className="pill primary clickable"
                     onClick={() => toggleTag(tag)}
-                    style={{ border: 'none' }}
+                    style={{ border: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
                   >
                     {tag}
+                    <span style={{ opacity: 0.6 }}>×</span>
                   </button>
-                );
-              })}
+                ))}
+              </div>
+            )}
+            {availableTags.filter((t) => !editForm.tags.includes(t.name)).length > 0 && (
+              <div className="flex-wrap mt-xs" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {availableTags
+                  .filter((t) => !editForm.tags.includes(t.name))
+                  .map((tagObj) => (
+                    <button
+                      key={tagObj.name}
+                      type="button"
+                      className="pill subtle clickable"
+                      onClick={() => toggleTag(tagObj.name)}
+                      style={{ border: 'none' }}
+                    >
+                      + {tagObj.name}
+                    </button>
+                  ))}
+              </div>
+            )}
+            <div className="inline gap-sm" style={{ marginTop: 8 }}>
+              <input
+                className="input"
+                placeholder="Add your own category…"
+                value={customTag}
+                onChange={(e) => setCustomTag(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustomTag();
+                  }
+                }}
+              />
+              <button type="button" className="btn ghost small" onClick={addCustomTag}>Add</button>
             </div>
           </label>
+
+          {updateVendor.isError ? (
+            <p className="error">{updateVendor.error?.message || 'Could not save changes.'}</p>
+          ) : null}
         </div>
       </Modal>
 
@@ -297,25 +401,27 @@ export function VendorProfilePage() {
               <div className="empty">No payouts yet.</div>
             ) : null}
           </div>
-          <form className="inline gap-sm" onSubmit={(e) => e.preventDefault()}>
-            <input
-              className="input"
-              type="number"
-              step="0.01"
-              placeholder="Amount"
-              value={payoutAmount}
-              onChange={(e) => setPayoutAmount(e.target.value)}
-            />
-            <button
-              className="btn primary"
-              onClick={() => createPayout.mutate()}
-              disabled={createPayout.isPending || !payoutAmount}
-            >
-              <Plus size={14} />
-              Quick payout
-            </button>
-            {createPayout.isError ? <p className="error">Failed to create payout.</p> : null}
-          </form>
+          {role !== 'vendor' && (
+            <form className="inline gap-sm" onSubmit={(e) => e.preventDefault()}>
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                placeholder="Amount"
+                value={payoutAmount}
+                onChange={(e) => setPayoutAmount(e.target.value)}
+              />
+              <button
+                className="btn primary"
+                onClick={() => createPayout.mutate()}
+                disabled={createPayout.isPending || !payoutAmount}
+              >
+                <Plus size={14} />
+                Quick payout
+              </button>
+              {createPayout.isError ? <p className="error">Failed to create payout.</p> : null}
+            </form>
+          )}
         </div>
 
         <div className="card">

@@ -229,8 +229,9 @@ body {
 
 .table {
   width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
+  max-height: 460px;      /* cap height so long tables scroll internally
+                             instead of growing the card down the page */
+  overflow: auto;          /* horizontal + vertical scroll as needed */
   -webkit-overflow-scrolling: touch;
 }
 
@@ -258,9 +259,10 @@ body {
   overflow: hidden;
 }
 
-/* Thin, unobtrusive horizontal scrollbar for wide tables */
+/* Thin, unobtrusive scrollbars for wide/tall tables */
 .table::-webkit-scrollbar {
   height: 8px;
+  width: 8px;
 }
 .table::-webkit-scrollbar-thumb {
   background: var(--border);
@@ -275,6 +277,11 @@ body {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  box-shadow: 0 1px 0 var(--border);
 }
 
 .table-row {
@@ -955,4 +962,18 @@ body {
 .stack,
 .card {
   min-width: 0;
+}
+
+/* Cap the curated (featured) lists so they scroll instead of growing the card */
+.curated-list {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.curated-list::-webkit-scrollbar {
+  width: 8px;
+}
+.curated-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
 }
