@@ -1,21 +1,22 @@
-const fs = require('fs');
 const path = require('path');
-const initSqlJs = require('sql.js');
+const Database = require('better-sqlite3');
 
 const DB_PATH = path.join(__dirname, '..', 'data.sqlite');
 
-let db;
+// Disk-backed SQLite via better-sqlite3: synchronous, real transactions, WAL
+// concurrency, and no full-file rewrite per statement (unlike the previous
+// sql.js in-memory engine that serialized the whole DB on every write).
+const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
-const ready = (async () => {
-  const SQL = await initSqlJs();
-  if (fs.existsSync(DB_PATH)) {
-    const fileBuffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(fileBuffer);
-  } else {
-    db = new SQL.Database();
-  }
+// Back-compat shim so the parameter-less DDL/seed calls in this file keep
+// working with `db.run('<sql>')`.
+db.run = (sql) => db.exec(sql);
 
-  db.run('PRAGMA foreign_keys = ON;');
+// Schema init runs synchronously at module load (the helper function
+// declarations below are hoisted, so they're callable here).
+{
   db.run(`
     CREATE TABLE IF NOT EXISTS vendors (
       id TEXT PRIMARY KEY,
@@ -172,16 +173,67 @@ const ready = (async () => {
     );
   `);
 
+  // Generic key/value store for app-wide settings (e.g. home page toggles)
+  db.run(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+  `);
+
   seedIfNeeded();
   ensureColumns();
-  persist();
-})();
-
-function persist() {
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_PATH, buffer);
+  normalizeMedia();
 }
+
+// One-time cleanup: rewrite stored media URLs that point at our own upload host
+// (any absolute URL whose path contains "/uploads/") down to a relative path,
+// so they resolve against whatever host currently serves the API instead of a
+// stale hardcoded origin. External URLs (e.g. Unsplash) are left untouched.
+function normalizeMedia() {
+  const done = get("SELECT value FROM app_settings WHERE key = 'media_normalized'");
+  if (done && done.value === '1') return;
+
+  const toRel = (v) => {
+    if (!v) return v;
+    try {
+      const u = new URL(v);
+      return u.pathname.includes('/uploads/') ? u.pathname + u.search : v;
+    } catch (e) {
+      return v; // already relative / not a URL
+    }
+  };
+
+  all('SELECT id, image_url, gallery FROM products').forEach((p) => {
+    let gallery = p.gallery;
+    try {
+      gallery = JSON.stringify((p.gallery ? JSON.parse(p.gallery) : []).map(toRel));
+    } catch (e) {
+      /* leave as-is */
+    }
+    run('UPDATE products SET image_url = ?, gallery = ? WHERE id = ?', [toRel(p.image_url), gallery, p.id]);
+  });
+  all('SELECT id, logo_url, cover_image_url FROM vendors').forEach((v) => {
+    run('UPDATE vendors SET logo_url = ?, cover_image_url = ? WHERE id = ?', [toRel(v.logo_url), toRel(v.cover_image_url), v.id]);
+  });
+  all('SELECT id, image_url FROM categories').forEach((c) => {
+    run('UPDATE categories SET image_url = ? WHERE id = ?', [toRel(c.image_url), c.id]);
+  });
+  all('SELECT id, image_url FROM promos').forEach((c) => {
+    run('UPDATE promos SET image_url = ? WHERE id = ?', [toRel(c.image_url), c.id]);
+  });
+
+  run(
+    "INSERT INTO app_settings (key, value) VALUES ('media_normalized', '1') ON CONFLICT(key) DO UPDATE SET value = '1'",
+  );
+  console.log('Normalized stored media URLs to relative paths.');
+}
+
+// Resolved immediately — kept so `await db.ready` in index.js still works.
+const ready = Promise.resolve();
+
+// better-sqlite3 writes straight to disk, so explicit persistence is a no-op.
+function persist() {}
 
 function seedIfNeeded() {
   const existing = get('SELECT COUNT(*) as count FROM vendors');
@@ -253,7 +305,6 @@ function seedIfNeeded() {
     'INSERT INTO vendors (id, name, description, rating, tags) VALUES (?, ?, ?, ?, ?)',
   );
   vendors.forEach((v) => vendorStmt.run([v.id, v.name, v.description, v.rating, v.tags]));
-  vendorStmt.free();
 
   const productStmt = db.prepare(
     'INSERT INTO products (id, vendor_id, name, description, price, sizes, colors, stock_quantity) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -261,7 +312,6 @@ function seedIfNeeded() {
   products.forEach((p) =>
     productStmt.run([p.id, p.vendor_id, p.name, p.description, p.price, p.sizes, p.colors, p.stock || 15]),
   );
-  productStmt.free();
 
   // Seed coupons
   const existingCoupons = get('SELECT COUNT(*) as count FROM coupons');
@@ -285,7 +335,6 @@ function seedIfNeeded() {
       const id = 'tag-' + Math.random().toString(36).substr(2, 9);
       const stmt = db.prepare('INSERT INTO vendor_tags (id, name, sort_order) VALUES (?, ?, ?)');
       stmt.run([id, tag, i]);
-      stmt.free();
     });
   }
 
@@ -312,12 +361,26 @@ function ensureColumns() {
     "ALTER TABLE users ADD COLUMN thawani_customer_id TEXT",
     "ALTER TABLE orders ADD COLUMN coupon_code TEXT",
     "ALTER TABLE vendors ADD COLUMN logo_url TEXT",
+    "ALTER TABLE vendors ADD COLUMN cover_image_url TEXT",
+    "ALTER TABLE vendors ADD COLUMN is_featured INTEGER DEFAULT 0",
+    "ALTER TABLE vendors ADD COLUMN featured_order INTEGER DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN featured_order INTEGER DEFAULT 0",
     "ALTER TABLE vendors ADD COLUMN views INTEGER DEFAULT 0",
     "ALTER TABLE vendors ADD COLUMN clicks INTEGER DEFAULT 0",
     "ALTER TABLE vendors ADD COLUMN shares INTEGER DEFAULT 0",
     "ALTER TABLE coupons ADD COLUMN id TEXT",
     "ALTER TABLE coupons ADD COLUMN vendor_id TEXT",
     "ALTER TABLE promos ADD COLUMN location TEXT DEFAULT 'home'",
+    // --- Advanced ads / campaign fields on promos ---
+    "ALTER TABLE promos ADD COLUMN start_at TEXT",
+    "ALTER TABLE promos ADD COLUMN end_at TEXT",
+    "ALTER TABLE promos ADD COLUMN priority INTEGER DEFAULT 0",
+    "ALTER TABLE promos ADD COLUMN vendor_id TEXT",
+    "ALTER TABLE promos ADD COLUMN pricing_model TEXT DEFAULT 'flat'",
+    "ALTER TABLE promos ADD COLUMN rate REAL DEFAULT 0",
+    "ALTER TABLE promos ADD COLUMN budget REAL DEFAULT 0",
+    "ALTER TABLE promos ADD COLUMN impressions INTEGER DEFAULT 0",
+    "ALTER TABLE promos ADD COLUMN clicks INTEGER DEFAULT 0",
   ];
   statements.forEach((sql) => {
     try {
@@ -353,26 +416,38 @@ function ensureColumns() {
   }
 }
 
+// Coerce bind values that better-sqlite3 rejects: booleans -> 0/1, and any
+// omitted (undefined) field -> NULL (matches COALESCE-style partial updates).
+function sanitize(params) {
+  return (params || []).map((p) => {
+    if (p === undefined) return null;
+    if (typeof p === 'boolean') return p ? 1 : 0;
+    return p;
+  });
+}
+
 function all(query, params = []) {
-  const stmt = db.prepare(query);
-  stmt.bind(params);
-  const rows = [];
-  while (stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  return rows;
+  return db.prepare(query).all(...sanitize(params));
 }
 
 function get(query, params = []) {
-  return all(query, params)[0];
+  return db.prepare(query).get(...sanitize(params));
 }
 
 function run(query, params = []) {
-  const stmt = db.prepare(query);
-  stmt.run(params);
-  stmt.free();
-  persist();
+  db.prepare(query).run(...sanitize(params));
+}
+
+// Statement executor for use inside a transaction (kept for API parity).
+function execRaw(query, params = []) {
+  db.prepare(query).run(...sanitize(params));
+}
+
+// Run a set of writes atomically. better-sqlite3 manages BEGIN/COMMIT/ROLLBACK
+// and rolls back automatically if `work` throws. `work` receives an
+// `exec(query, params)` helper.
+function transaction(work) {
+  db.transaction(() => work(execRaw))();
 }
 
 module.exports = {
@@ -381,4 +456,6 @@ module.exports = {
   get,
   run,
   persist,
+  execRaw,
+  transaction,
 };

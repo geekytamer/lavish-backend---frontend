@@ -4,7 +4,7 @@ import { Trash2, Plus, Images, Edit, Search } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatCurrency } from '../lib/formatters.jsx';
-import { validateImage } from '../lib/images.js';
+import { validateImage, IMAGE_SPECS } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
 import { StatCard } from '../components/StatCard.jsx';
 
@@ -28,6 +28,7 @@ export function ProductsPage() {
   });
   const [pendingFiles, setPendingFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
+  const [imageError, setImageError] = useState('');
   const [editing, setEditing] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState('');
@@ -57,7 +58,7 @@ export function ProductsPage() {
     mutationFn: async () => {
       const uploadedUrls = [];
       for (const file of pendingFiles) {
-        await validateImage(file);
+        await validateImage(file, { ...IMAGE_SPECS.product, label: 'Product image' });
         const res = await api.upload('/upload', file);
         uploadedUrls.push(res.file?.url || res.file?.path);
       }
@@ -97,9 +98,19 @@ export function ProductsPage() {
     saveProduct.mutate();
   };
 
-  const handleImageSelect = (e) => {
+  const handleImageSelect = async (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
+    setImageError('');
+    try {
+      for (const file of files) {
+        await validateImage(file, { ...IMAGE_SPECS.product, label: 'Product image' });
+      }
+    } catch (err) {
+      setImageError(err.message);
+      e.target.value = '';
+      return;
+    }
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
     setPendingFiles(files);
     setPreviewUrls(files.map((file) => URL.createObjectURL(file)));
@@ -150,6 +161,7 @@ export function ProductsPage() {
     setPendingFiles([]);
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
     setPreviewUrls([]);
+    setImageError('');
     if (fileInputRef.current) fileInputRef.current.value = '';
     setShowModal(false);
   };
@@ -399,6 +411,8 @@ export function ProductsPage() {
               <span className="muted xs">{pendingFiles.length} selected · uploads on save</span>
             ) : null}
           </div>
+          <span className="muted xs">{IMAGE_SPECS.product.hint}</span>
+          {imageError ? <p className="error">{imageError}</p> : null}
           {form.imageUrl ? (
             <div className="preview">
               <img src={form.imageUrl} alt="Product" />

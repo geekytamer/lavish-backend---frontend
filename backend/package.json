@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
+    "test": "node --test",
     "lint": "echo \"Add your linter (eslint) here\"",
     "seed:users": "node scripts/seed-users.js",
     "fix:media": "node scripts/normalize-media.js"
@@ -15,6 +16,7 @@
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.11.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

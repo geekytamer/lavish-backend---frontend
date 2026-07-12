@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Trash2, UserRound, Edit, Images, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useApiClient } from '../lib/api.js';
+import { validateImage, IMAGE_SPECS } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
 
 
@@ -10,15 +11,42 @@ import { Modal } from '../components/Modal.jsx';
 export function VendorsPage() {
   const api = useApiClient();
   const qc = useQueryClient();
-  const [form, setForm] = useState({ name: '', description: '', rating: '', tags: '', email: '', password: '', logo_url: '' });
+  const [form, setForm] = useState({ name: '', description: '', rating: '', tags: '', email: '', password: '', logo_url: '', cover_image_url: '' });
   const [editing, setEditing] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [lastCreated, setLastCreated] = useState(null);
   const [pendingLogo, setPendingLogo] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
+  const [pendingCover, setPendingCover] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [imageError, setImageError] = useState('');
   const [selectedTags, setSelectedTags] = useState([]);
   const [search, setSearch] = useState('');
   const [customTag, setCustomTag] = useState('');
+
+  const handleLogoSelect = async (file) => {
+    if (!file) return;
+    setImageError('');
+    try {
+      await validateImage(file, { ...IMAGE_SPECS.logo, label: 'Logo' });
+      setPendingLogo(file);
+      setLogoPreview(URL.createObjectURL(file));
+    } catch (err) {
+      setImageError(err.message);
+    }
+  };
+
+  const handleCoverSelect = async (file) => {
+    if (!file) return;
+    setImageError('');
+    try {
+      await validateImage(file, { ...IMAGE_SPECS.cover, label: 'Header image' });
+      setPendingCover(file);
+      setCoverPreview(URL.createObjectURL(file));
+    } catch (err) {
+      setImageError(err.message);
+    }
+  };
 
   const toggleTag = (tag) => {
     setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
@@ -43,19 +71,25 @@ export function VendorsPage() {
         const res = await api.upload('/upload', pendingLogo);
         logoUrl = res.file?.url || res.file?.path;
       }
+      let coverUrl = form.cover_image_url;
+      if (pendingCover) {
+        const res = await api.upload('/upload', pendingCover);
+        coverUrl = res.file?.url || res.file?.path;
+      }
       const payload = {
         name: form.name,
         description: form.description,
         rating: Number(form.rating) || 0,
         tags: selectedTags,
         logo_url: logoUrl,
+        cover_image_url: coverUrl,
       };
       if (editing) {
         return api.patch(`/vendors/${editing.id}`, payload);
       }
       return api.post('/vendors', { ...payload, email: form.email, password: form.password });
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       if (!editing) {
         setLastCreated({ email: form.email, password: form.password, name: form.name });
       }
@@ -71,9 +105,12 @@ export function VendorsPage() {
 
   const resetForm = (close = true) => {
     setEditing(null);
-    setForm({ name: '', description: '', rating: '', tags: '', email: '', password: '', logo_url: '' });
+    setForm({ name: '', description: '', rating: '', tags: '', email: '', password: '', logo_url: '', cover_image_url: '' });
     setPendingLogo(null);
     setLogoPreview(null);
+    setPendingCover(null);
+    setCoverPreview(null);
+    setImageError('');
     setSelectedTags([]);
     if (close) {
       setShowModal(false);
@@ -166,6 +203,7 @@ export function VendorsPage() {
                       description: vendor.description || '',
                       rating: vendor.rating || '',
                       logo_url: vendor.logo_url || '',
+                      cover_image_url: vendor.cover_image_url || '',
                     });
                     setSelectedTags(vendor.tags || []);
                     setShowModal(true);
@@ -239,15 +277,41 @@ export function VendorsPage() {
                 <input
                   id="logo-file"
                   type="file"
+                  accept="image/jpeg,image/png,image/webp"
                   hidden
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    setPendingLogo(file);
-                    setLogoPreview(URL.createObjectURL(file));
-                  }}
+                  onChange={(e) => handleLogoSelect(e.target.files[0])}
                 />
               </div>
+              <span className="muted xs">{IMAGE_SPECS.logo.hint}</span>
             </label>
+            <label className="label">
+              Brand Header Image
+              <div className="inline gap-md">
+                <button className="upload-btn" onClick={() => document.getElementById('cover-file').click()}>
+                  <Images size={14} /> Select Header
+                </button>
+                <input
+                  id="cover-file"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  hidden
+                  onChange={(e) => handleCoverSelect(e.target.files[0])}
+                />
+              </div>
+              {(coverPreview || form.cover_image_url) && (
+                <div
+                  className="preview"
+                  style={{ aspectRatio: '3 / 1', width: '100%', overflow: 'hidden', borderRadius: 12, marginTop: 8 }}
+                >
+                  <img
+                    src={coverPreview || form.cover_image_url}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+              )}
+              <span className="muted xs">{IMAGE_SPECS.cover.hint} Shown as the banner on the brand profile.</span>
+            </label>
+            {imageError ? <p className="error">{imageError}</p> : null}
             <label className="label">
               Name
               <input

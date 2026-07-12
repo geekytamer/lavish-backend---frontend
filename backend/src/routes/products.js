@@ -122,6 +122,8 @@ router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
     const resolvedVendorId = req.user?.role === 'vendor' ? req.user.vendorId : vendorId || ownerVendor;
     const cleanImage = imageUrl == null ? null : toRelative(imageUrl);
     const cleanGallery = gallery ? JSON.stringify((gallery || []).map((g) => toRelative(g))) : null;
+    // sql.js throws on `undefined` bindings — coerce omitted fields to null.
+    const nz = (v) => (v === undefined ? null : v);
     db.run(
       `UPDATE products
        SET name = COALESCE(?, name),
@@ -138,12 +140,12 @@ router.patch('/:id', requireAuth(['admin', 'vendor']), (req, res) => {
            tags = COALESCE(?, tags)
        WHERE id = ?`,
       [
-        name,
-        description,
+        nz(name),
+        nz(description),
         price == null ? null : Number(price),
         sizes ? JSON.stringify(sizes) : null,
         colors ? JSON.stringify(colors) : null,
-        categoryId,
+        nz(categoryId),
         cleanImage,
         cleanGallery,
         isFeatured == null ? null : isFeatured ? 1 : 0,

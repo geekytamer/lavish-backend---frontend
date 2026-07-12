@@ -1,9 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Pause, Play, Save } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
-import { validateImage } from '../lib/images.js';
+import { validateImage, IMAGE_SPECS } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
+import { CuratedPicker } from '../components/CuratedPicker.jsx';
+
+const PRICING_LABELS = { cpm: 'CPM', cpc: 'CPC', flat: 'Flat' };
+const STATUS_TONES = { active: 'success', scheduled: 'info', paused: 'subtle', expired: 'danger' };
+
+const emptyPromo = {
+  title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0, location: 'home',
+  startAt: '', endAt: '', priority: 0, vendorId: '', pricingModel: 'flat', rate: 0, budget: 0, active: true,
+};
+
+function fmtDate(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+}
+
+// The <input type="datetime-local"> gives/takes wall-clock time in the admin's
+// timezone. We store absolute UTC instants so scheduling is unambiguous.
+function localToUtc(local) {
+  if (!local) return '';
+  const d = new Date(local); // parses datetime-local as local time
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString();
+}
+
+function utcToLocalInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 export function ContentPage() {
   const api = useApiClient();
@@ -12,11 +44,56 @@ export function ContentPage() {
     queryKey: ['content', api.base],
     queryFn: () => api.get('/content/home'),
   });
+  const campaigns = useQuery({
+    queryKey: ['admin-promos', api.base],
+    queryFn: () => api.get('/content/promos/all').then((d) => d.promos || []),
+  });
+  const vendorsQuery = useQuery({
+    queryKey: ['vendors', api.base],
+    queryFn: () => api.get('/vendors').then((d) => d.vendors || []),
+  });
+  const productsQuery = useQuery({
+    queryKey: ['products-all', api.base],
+    queryFn: () => api.get('/products').then((d) => d.products || []),
+  });
+  const homeConfig = useQuery({
+    queryKey: ['home-settings', api.base],
+    queryFn: () => api.get('/content/home-settings'),
+  });
+
+  // Local (editable) state for the home layout, seeded from the server.
+  const [featuredBrandIds, setFeaturedBrandIds] = useState([]);
+  const [featuredProductIds, setFeaturedProductIds] = useState([]);
+  const [newArrivalsEnabled, setNewArrivalsEnabled] = useState(true);
+  const [homeDirty, setHomeDirty] = useState(false);
+  const [syncedHome, setSyncedHome] = useState(null);
+
+  // Seed editable state from the server response (adjust-during-render pattern:
+  // resets the form whenever fresh server data arrives, without an effect).
+  if (homeConfig.data && homeConfig.data !== syncedHome) {
+    setSyncedHome(homeConfig.data);
+    setFeaturedBrandIds((homeConfig.data.featuredVendors || []).map((v) => v.id));
+    setFeaturedProductIds((homeConfig.data.featuredProducts || []).map((p) => p.id));
+    setNewArrivalsEnabled(homeConfig.data.settings?.newArrivalsEnabled !== false);
+    setHomeDirty(false);
+  }
+
+  const saveHome = useMutation({
+    mutationFn: async () => {
+      await api.post('/content/featured-brands', { ids: featuredBrandIds });
+      await api.post('/content/featured-products', { ids: featuredProductIds });
+      await api.patch('/content/home-settings', { newArrivalsEnabled });
+    },
+    onSuccess: () => {
+      setHomeDirty(false);
+      qc.invalidateQueries({ queryKey: ['home-settings', api.base] });
+    },
+  });
   const [categoryForm, setCategoryForm] = useState({ name: '', imageUrl: '', sortOrder: 0 });
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
 
-  const [promoForm, setPromoForm] = useState({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0, location: 'home' });
+  const [promoForm, setPromoForm] = useState(emptyPromo);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [editingPromo, setEditingPromo] = useState(null);
 
@@ -38,25 +115,43 @@ export function ContentPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['content', api.base] }),
   });
 
+  const invalidatePromos = () => {
+    qc.invalidateQueries({ queryKey: ['content', api.base] });
+    qc.invalidateQueries({ queryKey: ['admin-promos', api.base] });
+  };
+
   const createPromo = useMutation({
-    mutationFn: () =>
-      editingPromo ? api.patch(`/content/promos/${editingPromo.id}`, promoForm) : api.post('/content/promos', promoForm),
+    mutationFn: () => {
+      const payload = {
+        ...promoForm,
+        startAt: localToUtc(promoForm.startAt),
+        endAt: localToUtc(promoForm.endAt),
+      };
+      return editingPromo
+        ? api.patch(`/content/promos/${editingPromo.id}`, payload)
+        : api.post('/content/promos', payload);
+    },
     onSuccess: () => {
-      setPromoForm({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0, location: 'home' });
+      setPromoForm(emptyPromo);
       setEditingPromo(null);
       setShowPromoModal(false);
-      qc.invalidateQueries({ queryKey: ['content', api.base] });
+      invalidatePromos();
     },
   });
 
   const deletePromo = useMutation({
     mutationFn: (id) => api.del(`/content/promos/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['content', api.base] }),
+    onSuccess: invalidatePromos,
+  });
+
+  const togglePromoActive = useMutation({
+    mutationFn: ({ id, active }) => api.patch(`/content/promos/${id}`, { active }),
+    onSuccess: invalidatePromos,
   });
 
   const uploadCategoryImage = useMutation({
     mutationFn: async (file) => {
-      await validateImage(file);
+      await validateImage(file, { ...IMAGE_SPECS.category, label: 'Category image' });
       const res = await api.upload('/upload', file);
       return res.file?.url || res.file?.path;
     },
@@ -65,7 +160,7 @@ export function ContentPage() {
 
   const uploadPromoImage = useMutation({
     mutationFn: async (file) => {
-      await validateImage(file);
+      await validateImage(file, { ...IMAGE_SPECS.banner, label: 'Ad banner' });
       const res = await api.upload('/upload', file);
       return res.file?.url || res.file?.path;
     },
@@ -125,12 +220,76 @@ export function ContentPage() {
     createTag.mutate();
   };
 
-  const promos = content.data?.promos || [];
+  const promos = campaigns.data || [];
   const categories = content.data?.categories || [];
   const vendorTags = content.data?.vendorTags || [];
+  const vendors = vendorsQuery.data || [];
+  const products = productsQuery.data || [];
+
+  const markHomeDirty = (setter) => (val) => {
+    setter(val);
+    setHomeDirty(true);
+  };
 
   return (
     <div className="stack gap-lg">
+      {/* Home page layout */}
+      <div className="card">
+        <div className="card-head">
+          <div>
+            <p className="eyebrow">Storefront</p>
+            <h3>Home Page</h3>
+            <p className="muted xs">Curate what shoppers see on the app home screen.</p>
+          </div>
+          <button
+            className="btn primary small"
+            onClick={() => saveHome.mutate()}
+            disabled={saveHome.isPending || !homeDirty}
+          >
+            <Save size={14} /> {saveHome.isPending ? 'Saving…' : homeDirty ? 'Save changes' : 'Saved'}
+          </button>
+        </div>
+        <div className="grid two gap-lg">
+          <div className="stack gap-sm">
+            <label className="label">Featured brands</label>
+            <p className="muted xs">Pick and order the brands in the “Featured brands” row. Leave empty to show all brands.</p>
+            <CuratedPicker
+              options={vendors}
+              value={featuredBrandIds}
+              onChange={markHomeDirty(setFeaturedBrandIds)}
+              getLabel={(v) => v.name}
+              emptyHint="No featured brands — the app shows all brands."
+            />
+          </div>
+          <div className="stack gap-sm">
+            <label className="label">Featured items</label>
+            <p className="muted xs">Pick and order the products in the “Featured items” row. Leave empty to hide the section.</p>
+            <CuratedPicker
+              options={products}
+              value={featuredProductIds}
+              onChange={markHomeDirty(setFeaturedProductIds)}
+              getLabel={(p) => p.name}
+              emptyHint="No featured items — the section is hidden."
+            />
+          </div>
+        </div>
+        <div className="section-divider" />
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={newArrivalsEnabled}
+            onChange={(e) => markHomeDirty(setNewArrivalsEnabled)(e.target.checked)}
+          />
+          <span>
+            <strong>New arrivals</strong> — automatically show the latest products
+            <span className="muted xs" style={{ display: 'block' }}>
+              When on, the newest products appear in a “New arrivals” section.
+            </span>
+          </span>
+        </label>
+        {saveHome.isError ? <p className="error">Couldn’t save the home layout.</p> : null}
+      </div>
+
       <div className="grid two gap-lg">
         <div className="card">
           <div className="card-head">
@@ -249,66 +408,103 @@ export function ContentPage() {
       <div className="card">
         <div className="card-head">
           <div>
-            <p className="eyebrow">Content</p>
-            <h3>Promos</h3>
+            <p className="eyebrow">Monetization</p>
+            <h3>Ad Campaigns</h3>
+            <p className="muted xs">Scheduled, priced banner ads served to the app. Only live campaigns are shown to shoppers.</p>
           </div>
           <button
             className="btn primary small"
             onClick={() => {
               setEditingPromo(null);
-              setPromoForm({ title: '', subtitle: '', imageUrl: '', cta: '', link: '', sortOrder: 0, location: 'home' });
+              setPromoForm(emptyPromo);
               setShowPromoModal(true);
             }}
           >
-            <Plus size={14} /> New
+            <Plus size={14} /> New campaign
           </button>
         </div>
         <div className="table">
           <div className="table-head">
-            <span>Title</span>
-            <span>Subtitle</span>
-            <span>Location</span>
-            <span>Sort</span>
+            <span>Campaign</span>
+            <span>Status</span>
+            <span>Advertiser</span>
+            <span>Placement</span>
+            <span>Flight</span>
+            <span>Pricing</span>
+            <span>Performance</span>
             <span />
           </div>
-          {promos.map((promo) => (
-            <div key={promo.id} className="table-row">
-              <span>{promo.title}</span>
-              <span className="muted xs">{promo.subtitle}</span>
-              <span className="pill subtle mono xs">{promo.location || 'home'}</span>
-              <span>{promo.sort_order ?? promo.sortOrder ?? 0}</span>
-              <span className="inline gap-sm">
-                <button
-                  className="icon-btn"
-                  onClick={() => {
-                    setEditingPromo(promo);
-                    setPromoForm({
-                      title: promo.title || '',
-                      subtitle: promo.subtitle || '',
-                      imageUrl: promo.image_url || promo.imageUrl || '',
-                      cta: promo.cta || '',
-                      link: promo.link || '',
-                      sortOrder: promo.sort_order ?? promo.sortOrder ?? 0,
-                      location: promo.location || 'home',
-                    });
-                    setShowPromoModal(true);
-                  }}
-                >
-                  <Edit size={14} />
-                </button>
-                <button
-                  className="icon-btn danger"
-                  onClick={() => {
-                    if (window.confirm('Delete this promo?')) deletePromo.mutate(promo.id);
-                  }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </span>
-            </div>
-          ))}
-          {content.isLoading ? <div className="empty">Loading promos...</div> : null}
-          {!content.isLoading && promos.length === 0 ? <div className="empty">No promos yet.</div> : null}
+          {promos.map((promo) => {
+            const impressions = promo.impressions || 0;
+            const clicks = promo.clicks || 0;
+            const ctr = impressions > 0 ? ((clicks / impressions) * 100).toFixed(1) : '0.0';
+            return (
+              <div key={promo.id} className="table-row">
+                <span>
+                  <div>{promo.title}</div>
+                  <div className="muted xs">{promo.subtitle}</div>
+                </span>
+                <span>
+                  <span className={`pill ${STATUS_TONES[promo.status] || 'subtle'}`}>{promo.status}</span>
+                </span>
+                <span className="xs">{promo.advertiser || <span className="muted">House</span>}</span>
+                <span className="pill subtle mono xs">{promo.location || 'home'}</span>
+                <span className="xs">{fmtDate(promo.start_at)} → {fmtDate(promo.end_at)}</span>
+                <span className="xs">
+                  <span className="pill info xs">{PRICING_LABELS[promo.pricing_model] || 'Flat'}</span>
+                  {promo.rate ? <span className="muted"> · {promo.rate}</span> : null}
+                </span>
+                <span className="xs" title={`${impressions} impressions · ${clicks} clicks`}>
+                  {impressions.toLocaleString()} imp · {ctr}% CTR
+                </span>
+                <span className="inline gap-sm">
+                  <button
+                    className="icon-btn"
+                    title={promo.active ? 'Pause' : 'Resume'}
+                    onClick={() => togglePromoActive.mutate({ id: promo.id, active: !promo.active })}
+                  >
+                    {promo.active ? <Pause size={14} /> : <Play size={14} />}
+                  </button>
+                  <button
+                    className="icon-btn"
+                    onClick={() => {
+                      setEditingPromo(promo);
+                      setPromoForm({
+                        title: promo.title || '',
+                        subtitle: promo.subtitle || '',
+                        imageUrl: promo.image_url || promo.imageUrl || '',
+                        cta: promo.cta || '',
+                        link: promo.link || '',
+                        sortOrder: promo.sort_order ?? promo.sortOrder ?? 0,
+                        location: promo.location || 'home',
+                        startAt: utcToLocalInput(promo.start_at),
+                        endAt: utcToLocalInput(promo.end_at),
+                        priority: promo.priority ?? 0,
+                        vendorId: promo.vendor_id || '',
+                        pricingModel: promo.pricing_model || 'flat',
+                        rate: promo.rate ?? 0,
+                        budget: promo.budget ?? 0,
+                        active: !!promo.active,
+                      });
+                      setShowPromoModal(true);
+                    }}
+                  >
+                    <Edit size={14} />
+                  </button>
+                  <button
+                    className="icon-btn danger"
+                    onClick={() => {
+                      if (window.confirm('Delete this campaign?')) deletePromo.mutate(promo.id);
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </span>
+              </div>
+            );
+          })}
+          {campaigns.isLoading ? <div className="empty">Loading campaigns...</div> : null}
+          {!campaigns.isLoading && promos.length === 0 ? <div className="empty">No campaigns yet.</div> : null}
         </div>
       </div>
 
@@ -405,7 +601,7 @@ export function ContentPage() {
 
       <Modal
         open={showPromoModal}
-        title={editingPromo ? 'Edit promo' : 'New promo'}
+        title={editingPromo ? 'Edit campaign' : 'New campaign'}
         onClose={() => setShowPromoModal(false)}
         footer={
           <>
@@ -447,20 +643,21 @@ export function ContentPage() {
           </select>
         </label>
         <label className="label">
-          Image URL
+          Banner image
           <input
             className="input"
             value={promoForm.imageUrl}
             onChange={(e) => setPromoForm((f) => ({ ...f, imageUrl: e.target.value }))}
           />
           <div className="inline">
-            <input type="file" accept="image/*" onChange={handlePromoImage} />
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePromoImage} />
             {uploadPromoImage.isPending ? <span className="muted xs">Uploading…</span> : null}
             {uploadPromoImage.isError ? <span className="error xs">{uploadPromoImage.error.message}</span> : null}
           </div>
+          <span className="muted xs">{IMAGE_SPECS.banner.hint}</span>
           {promoForm.imageUrl ? (
-            <div className="preview">
-              <img src={promoForm.imageUrl} alt="Promo" />
+            <div className="preview" style={{ aspectRatio: '16 / 9', width: '100%', overflow: 'hidden', borderRadius: 12, marginTop: 8 }}>
+              <img src={promoForm.imageUrl} alt="Ad banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
           ) : null}
         </label>
@@ -505,16 +702,106 @@ export function ContentPage() {
             />
           </label>
         </div>
+        <div className="section-divider" />
+        <p className="eyebrow">Advertiser & monetization</p>
         <label className="label">
-          Sort order
+          Advertiser (brand)
+          <select
+            className="input"
+            value={promoForm.vendorId}
+            onChange={(e) => setPromoForm((f) => ({ ...f, vendorId: e.target.value }))}
+          >
+            <option value="">House ad (no advertiser)</option>
+            {vendors.map((v) => (
+              <option key={v.id} value={v.id}>{v.name}</option>
+            ))}
+          </select>
+          <span className="muted xs">Shown as “Sponsored by …” in the app and used for revenue attribution.</span>
+        </label>
+        <div className="grid two gap-md">
+          <label className="label">
+            Pricing model
+            <select
+              className="input"
+              value={promoForm.pricingModel}
+              onChange={(e) => setPromoForm((f) => ({ ...f, pricingModel: e.target.value }))}
+            >
+              <option value="flat">Flat (fixed fee)</option>
+              <option value="cpm">CPM (per 1,000 views)</option>
+              <option value="cpc">CPC (per click)</option>
+            </select>
+          </label>
+          <label className="label">
+            Rate (OMR)
+            <input
+              className="input"
+              type="number"
+              step="0.001"
+              min="0"
+              value={promoForm.rate}
+              onChange={(e) => setPromoForm((f) => ({ ...f, rate: Number(e.target.value) }))}
+            />
+          </label>
+        </div>
+        <label className="label">
+          Budget cap (OMR)
           <input
             className="input"
             type="number"
-            value={promoForm.sortOrder}
-            onChange={(e) => setPromoForm((f) => ({ ...f, sortOrder: Number(e.target.value) }))}
+            step="0.001"
+            min="0"
+            value={promoForm.budget}
+            onChange={(e) => setPromoForm((f) => ({ ...f, budget: Number(e.target.value) }))}
           />
         </label>
-        {createPromo.isError ? <p className="error">Unable to save promo.</p> : null}
+
+        <div className="section-divider" />
+        <p className="eyebrow">Scheduling & priority</p>
+        <div className="grid two gap-md">
+          <label className="label">
+            Starts
+            <input
+              className="input"
+              type="datetime-local"
+              value={promoForm.startAt}
+              onChange={(e) => setPromoForm((f) => ({ ...f, startAt: e.target.value }))}
+            />
+          </label>
+          <label className="label">
+            Ends
+            <input
+              className="input"
+              type="datetime-local"
+              value={promoForm.endAt}
+              onChange={(e) => setPromoForm((f) => ({ ...f, endAt: e.target.value }))}
+            />
+          </label>
+        </div>
+        <div className="grid two gap-md">
+          <label className="label">
+            Priority
+            <input
+              className="input"
+              type="number"
+              value={promoForm.priority}
+              onChange={(e) => setPromoForm((f) => ({ ...f, priority: Number(e.target.value) }))}
+            />
+            <span className="muted xs">Higher shows first.</span>
+          </label>
+          <label className="label">
+            Status
+            <label className="inline gap-sm" style={{ marginTop: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={promoForm.active}
+                onChange={(e) => setPromoForm((f) => ({ ...f, active: e.target.checked }))}
+              />
+              <span>{promoForm.active ? 'Live (respects schedule)' : 'Paused'}</span>
+            </label>
+          </label>
+        </div>
+        <p className="muted xs">Leave dates empty to run immediately with no end. A campaign only serves while live and within its flight window.</p>
+        {createPromo.isError ? <p className="error">Unable to save campaign.</p> : null}
       </Modal>
     </div>
   );

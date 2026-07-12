@@ -196,7 +196,7 @@ router.get('/products', (req, res) => {
     const args = req.query.vendorId ? [req.query.vendorId] : [];
     const totalRow = db.get(`SELECT COUNT(*) as count FROM products ${vendorFilter}`, args);
     const rows = db.all(
-      `SELECT * FROM products ${vendorFilter} LIMIT ? OFFSET ?`,
+      `SELECT * FROM products ${vendorFilter} ORDER BY rowid DESC LIMIT ? OFFSET ?`,
       req.query.vendorId ? [req.query.vendorId, limit, offset] : [limit, offset],
     );
     const parsed = rows.map((row) => {

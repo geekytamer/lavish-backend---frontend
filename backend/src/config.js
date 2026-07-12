@@ -17,8 +17,11 @@ const config = {
     process.env.THAWANI_PUBLISHABLE_KEY || "thawani_publishable_key",
   jwtSecret: process.env.JWT_SECRET || "change_me",
   appDeepLink: process.env.APP_DEEP_LINK || "lavish://payment",
-  publicUrl: process.env.PUBLIC_URL || "https://s6159rc7-4000.euw.devtunnels.ms",
-  appWebReturn: process.env.APP_WEB_RETURN_URL || process.env.PUBLIC_URL || "https://s6159rc7-4000.euw.devtunnels.ms",
+  // Public origin that serves uploaded media. Leave PUBLIC_URL unset to serve
+  // media from whatever host the API is reached on (correct for local/LAN); set
+  // it to your CDN/domain in production. No stale default.
+  publicUrl: process.env.PUBLIC_URL || "",
+  appWebReturn: process.env.APP_WEB_RETURN_URL || process.env.PUBLIC_URL || "",
   appStoreAndroidUrl:
     process.env.APP_STORE_ANDROID_URL ||
     "https://play.google.com/store/apps/details?id=your.android.package",

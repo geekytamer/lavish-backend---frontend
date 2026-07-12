@@ -4,32 +4,34 @@ const { requireAuth } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 const { Resend } = require('resend');
 const config = require('../config');
+const { resolveUrl } = require('../lib/url');
 
 const router = express.Router();
 
 const resend = new Resend(config.resendApiKey);
 
-function parseVendor(row) {
-  return row
-    ? {
-      ...row,
-      tags: row.tags ? JSON.parse(row.tags) : [],
-    }
-    : null;
+function parseVendor(row, req) {
+  if (!row) return null;
+  return {
+    ...row,
+    tags: row.tags ? JSON.parse(row.tags) : [],
+    logo_url: resolveUrl(req, row.logo_url),
+    cover_image_url: resolveUrl(req, row.cover_image_url),
+  };
 }
 
-router.get('/', (_req, res) => {
+router.get('/', (req, res) => {
   try {
-    const db = _req.app.locals.db;
+    const db = req.app.locals.db;
     const rows = db.all('SELECT * FROM vendors');
-    res.json({ vendors: rows.map(parseVendor) });
+    res.json({ vendors: rows.map((r) => parseVendor(r, req)) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 router.post('/', requireAuth(['admin']), async (req, res) => {
-  const { name, email, password, description = '', tags = [], id, logo_url } = req.body || {};
+  const { name, email, password, description = '', tags = [], id, logo_url, cover_image_url } = req.body || {};
 
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required' });
@@ -48,8 +50,8 @@ router.post('/', requireAuth(['admin']), async (req, res) => {
 
     // 2. Create Vendor
     db.run(
-      'INSERT INTO vendors (id, name, description, rating, tags, logo_url) VALUES (?, ?, ?, ?, ?, ?)',
-      [vendorId, name, description, 5.0, JSON.stringify(tags || []), logo_url || null],
+      'INSERT INTO vendors (id, name, description, rating, tags, logo_url, cover_image_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [vendorId, name, description, 5.0, JSON.stringify(tags || []), logo_url || null, cover_image_url || null],
     );
 
     // 3. Create User
@@ -82,7 +84,7 @@ router.post('/', requireAuth(['admin']), async (req, res) => {
 
     const created = db.get('SELECT * FROM vendors WHERE id = ?', [vendorId]);
     res.status(201).json({
-      vendor: parseVendor(created),
+      vendor: parseVendor(created, req),
       message: 'Vendor created and credentials sent.'
     });
   } catch (err) {
@@ -91,16 +93,19 @@ router.post('/', requireAuth(['admin']), async (req, res) => {
 });
 
 router.patch('/:id', requireAuth(['admin']), (req, res) => {
-  const { name, description, rating, tags, logo_url } = req.body || {};
+  const { name, description, rating, tags, logo_url, cover_image_url } = req.body || {};
   try {
     const db = req.app.locals.db;
+    // Coerce any omitted field to null — sql.js throws on `undefined` bindings,
+    // so a partial PATCH would otherwise 500.
+    const nz = (v) => (v === undefined ? null : v);
     db.run(
-      'UPDATE vendors SET name = COALESCE(?, name), description = COALESCE(?, description), rating = COALESCE(?, rating), tags = COALESCE(?, tags), logo_url = COALESCE(?, logo_url) WHERE id = ?',
-      [name, description, rating == null ? null : Number(rating), tags ? JSON.stringify(tags) : null, logo_url || null, req.params.id],
+      'UPDATE vendors SET name = COALESCE(?, name), description = COALESCE(?, description), rating = COALESCE(?, rating), tags = COALESCE(?, tags), logo_url = COALESCE(?, logo_url), cover_image_url = COALESCE(?, cover_image_url) WHERE id = ?',
+      [nz(name), nz(description), rating == null ? null : Number(rating), tags ? JSON.stringify(tags) : null, logo_url || null, cover_image_url || null, req.params.id],
     );
     const updated = db.get('SELECT * FROM vendors WHERE id = ?', [req.params.id]);
     if (!updated) return res.status(404).json({ error: 'Vendor not found' });
-    res.json({ vendor: parseVendor(updated) });
+    res.json({ vendor: parseVendor(updated, req) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -198,7 +203,7 @@ router.get('/:id/profile', (req, res) => {
   try {
     const db = req.app.locals.db;
     const vendorId = req.params.id;
-    const vendor = parseVendor(db.get('SELECT * FROM vendors WHERE id = ?', [vendorId]));
+    const vendor = parseVendor(db.get("SELECT * FROM vendors WHERE id = ?", [vendorId]), req);
     if (!vendor) return res.status(404).json({ error: 'Not found' });
     const products = db.all('SELECT * FROM products WHERE vendor_id = ?', [vendorId]);
     const receipts = db.all(

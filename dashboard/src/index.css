@@ -229,15 +229,45 @@ body {
 
 .table {
   width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
+/* One grid column per cell (count follows the number of <span>s), so the head
+   and every row stay aligned regardless of how many columns a table has.
+   Columns hold a readable minimum and the row grows past the container when
+   needed, letting the .table wrapper scroll horizontally. */
 .table-head,
 .table-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
-  padding: 10px 8px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(140px, 1fr);
+  min-width: min-content;
+  gap: 12px;
+  padding: 12px 10px;
   align-items: center;
+}
+
+/* Keep each cell's content inside its own column (long emails/addresses would
+   otherwise overflow into the neighbouring column). Pills, button groups and
+   stacked title/subtitle cells are left intact. */
+.table-head > span,
+.table-row > span {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Thin, unobtrusive horizontal scrollbar for wide tables */
+.table::-webkit-scrollbar {
+  height: 8px;
+}
+.table::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 8px;
+}
+.table::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
 }
 
 .table-head {
@@ -841,4 +871,88 @@ body {
   .cards-4 {
     grid-template-columns: 1fr;
   }
+}
+/* Divider used to separate sections inside modals/forms */
+.section-divider {
+  height: 1px;
+  background: var(--border, rgba(0, 0, 0, 0.08));
+  margin: 18px 0 6px;
+}
+
+/* Curated picker rows (home page featured lists) */
+.curated-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+.curated-index {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--brand, #2563eb);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.curated-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+/* Simple switch */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.switch input {
+  appearance: none;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.2s ease;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.switch input:checked {
+  background: #16a34a;
+}
+.switch input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+.switch input:checked::after {
+  transform: translateX(18px);
+}
+
+/* Allow the content column / cards to shrink below their content's intrinsic
+   width so wide .table elements scroll horizontally instead of pushing the
+   whole layout past the viewport (grid/flex items default to min-width:auto). */
+.main,
+.stack,
+.card {
+  min-width: 0;
 }

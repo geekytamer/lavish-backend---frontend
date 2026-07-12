@@ -47,3 +47,6 @@ flutter_app/.packages
 flutter_app/pubspec.lock
 flutter_app/ios/Flutter/Generated.xcconfig
 flutter_app/ios/Flutter/flutter_export_environment.sh
+
+# SQLite runtime artifacts (WAL/SHM/backups)
+backend/data.sqlite*
