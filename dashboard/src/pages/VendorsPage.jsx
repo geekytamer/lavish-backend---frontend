@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom';
 import { Plus, Trash2, UserRound, Edit, Images, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useApiClient } from '../lib/api.js';
-import { validateImage, IMAGE_SPECS } from '../lib/images.js';
+import { IMAGE_SPECS } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
+import { useImageCropper } from '../components/ImageCropper.jsx';
 
 
 
@@ -24,15 +25,17 @@ export function VendorsPage() {
   const [search, setSearch] = useState('');
   const [customTag, setCustomTag] = useState('');
 
+  const { cropFile, cropperModal } = useImageCropper();
+
   const handleLogoSelect = async (file) => {
     if (!file) return;
     setImageError('');
     try {
-      await validateImage(file, { ...IMAGE_SPECS.logo, label: 'Logo' });
-      setPendingLogo(file);
-      setLogoPreview(URL.createObjectURL(file));
+      const cropped = await cropFile(file, { aspect: IMAGE_SPECS.logo.aspect, cropShape: 'round', label: 'Logo' });
+      setPendingLogo(cropped);
+      setLogoPreview(URL.createObjectURL(cropped));
     } catch (err) {
-      setImageError(err.message);
+      if (err.message !== 'cancelled') setImageError(err.message);
     }
   };
 
@@ -40,11 +43,11 @@ export function VendorsPage() {
     if (!file) return;
     setImageError('');
     try {
-      await validateImage(file, { ...IMAGE_SPECS.cover, label: 'Header image' });
-      setPendingCover(file);
-      setCoverPreview(URL.createObjectURL(file));
+      const cropped = await cropFile(file, { aspect: IMAGE_SPECS.cover.aspect, cropShape: 'rect', label: 'Header image' });
+      setPendingCover(cropped);
+      setCoverPreview(URL.createObjectURL(cropped));
     } catch (err) {
-      setImageError(err.message);
+      if (err.message !== 'cancelled') setImageError(err.message);
     }
   };
 
@@ -444,6 +447,7 @@ export function VendorsPage() {
           </>
         )}
       </Modal>
+      {cropperModal}
     </div >
   );
 }

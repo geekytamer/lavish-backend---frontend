@@ -4,8 +4,9 @@ import { Trash2, Plus, Images, Edit, Search } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
 import { useApp } from '../context/AppContext.jsx';
 import { formatCurrency } from '../lib/formatters.jsx';
-import { validateImage, IMAGE_SPECS } from '../lib/images.js';
+import { IMAGE_SPECS } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
+import { useImageCropper } from '../components/ImageCropper.jsx';
 import { StatCard } from '../components/StatCard.jsx';
 
 export function ProductsPage() {
@@ -58,7 +59,6 @@ export function ProductsPage() {
     mutationFn: async () => {
       const uploadedUrls = [];
       for (const file of pendingFiles) {
-        await validateImage(file, { ...IMAGE_SPECS.product, label: 'Product image' });
         const res = await api.upload('/upload', file);
         uploadedUrls.push(res.file?.url || res.file?.path);
       }
@@ -98,22 +98,26 @@ export function ProductsPage() {
     saveProduct.mutate();
   };
 
+  const { cropFile, cropperModal } = useImageCropper();
+
   const handleImageSelect = async (e) => {
     const files = Array.from(e.target.files || []);
+    e.target.value = '';
     if (!files.length) return;
     setImageError('');
+    // Crop each selected image to 9:16 in sequence.
+    const cropped = [];
     try {
       for (const file of files) {
-        await validateImage(file, { ...IMAGE_SPECS.product, label: 'Product image' });
+        cropped.push(await cropFile(file, { aspect: IMAGE_SPECS.product.aspect, cropShape: 'rect', label: 'Product image' }));
       }
     } catch (err) {
-      setImageError(err.message);
-      e.target.value = '';
-      return;
+      if (err.message !== 'cancelled') setImageError(err.message);
     }
+    if (cropped.length === 0) return;
     previewUrls.forEach((url) => URL.revokeObjectURL(url));
-    setPendingFiles(files);
-    setPreviewUrls(files.map((file) => URL.createObjectURL(file)));
+    setPendingFiles(cropped);
+    setPreviewUrls(cropped.map((file) => URL.createObjectURL(file)));
   };
 
   const startNew = () => {
@@ -456,6 +460,7 @@ export function ProductsPage() {
           </p>
         ) : null}
       </Modal>
+      {cropperModal}
     </div>
   );
 }

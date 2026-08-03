@@ -2,9 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Plus, Edit, Trash2, Pause, Play, Save } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
-import { validateImage, IMAGE_SPECS } from '../lib/images.js';
+import { IMAGE_SPECS } from '../lib/images.js';
 import { Modal } from '../components/Modal.jsx';
 import { CuratedPicker } from '../components/CuratedPicker.jsx';
+import { useImageCropper } from '../components/ImageCropper.jsx';
 
 const PRICING_LABELS = { cpm: 'CPM', cpc: 'CPC', flat: 'Flat' };
 const STATUS_TONES = { active: 'success', scheduled: 'info', paused: 'subtle', expired: 'danger' };
@@ -149,9 +150,10 @@ export function ContentPage() {
     onSuccess: invalidatePromos,
   });
 
+  const { cropFile, cropperModal } = useImageCropper();
+
   const uploadCategoryImage = useMutation({
     mutationFn: async (file) => {
-      await validateImage(file, { ...IMAGE_SPECS.category, label: 'Category image' });
       const res = await api.upload('/upload', file);
       return res.file?.url || res.file?.path;
     },
@@ -160,23 +162,34 @@ export function ContentPage() {
 
   const uploadPromoImage = useMutation({
     mutationFn: async (file) => {
-      await validateImage(file, { ...IMAGE_SPECS.banner, label: 'Ad banner' });
       const res = await api.upload('/upload', file);
       return res.file?.url || res.file?.path;
     },
     onSuccess: (url) => setPromoForm((f) => ({ ...f, imageUrl: url || f.imageUrl })),
   });
 
-  const handleCategoryImage = (e) => {
+  const handleCategoryImage = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    uploadCategoryImage.mutate(file);
+    try {
+      const cropped = await cropFile(file, { aspect: IMAGE_SPECS.category.aspect, cropShape: 'rect', label: 'Category image' });
+      uploadCategoryImage.mutate(cropped);
+    } catch {
+      /* cancelled */
+    }
   };
 
-  const handlePromoImage = (e) => {
+  const handlePromoImage = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    uploadPromoImage.mutate(file);
+    try {
+      const cropped = await cropFile(file, { aspect: IMAGE_SPECS.banner.aspect, cropShape: 'rect', label: 'Ad banner' });
+      uploadPromoImage.mutate(cropped);
+    } catch {
+      /* cancelled */
+    }
   };
 
   const handleCategorySubmit = (e) => {
@@ -803,6 +816,7 @@ export function ContentPage() {
         <p className="muted xs">Leave dates empty to run immediately with no end. A campaign only serves while live and within its flight window.</p>
         {createPromo.isError ? <p className="error">Unable to save campaign.</p> : null}
       </Modal>
+      {cropperModal}
     </div>
   );
 }

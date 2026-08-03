@@ -117,7 +117,7 @@ router.post('/thawani/session', (req, res) => {
   const db = req.app?.locals?.db;
   if (!db) return res.status(500).json({ error: 'Database unavailable' });
 
-  const order = db.get('SELECT id, total, shipping_address, customer_email, customer_phone FROM orders WHERE id = ?', [
+  const order = db.get('SELECT id, total, tax_amount, shipping_fee, shipping_address, customer_email, customer_phone FROM orders WHERE id = ?', [
     orderId,
   ]);
   if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -125,6 +125,18 @@ router.post('/thawani/session', (req, res) => {
   if (!Number.isFinite(total) || total <= 0) {
     return res.status(400).json({ error: 'Order total invalid' });
   }
+  const taxAmount = Number(order.tax_amount || 0);
+  const shippingFee = Number(order.shipping_fee || 0);
+  const itemsSubtotal = Math.max(0, total - taxAmount - shippingFee);
+  const toBaisa = (omr) => Math.max(0, Math.round(omr * 1000));
+  // Break the charge into line items so the Thawani page shows subtotal, tax and
+  // shipping — and the sum equals order.total (was previously a single line that
+  // charged only the pre-tax subtotal).
+  const lineItems = [
+    { name: 'Order subtotal', quantity: 1, unit_amount: Math.max(1, toBaisa(itemsSubtotal)) },
+  ];
+  if (taxAmount > 0) lineItems.push({ name: 'Tax (5%)', quantity: 1, unit_amount: toBaisa(taxAmount) });
+  if (shippingFee > 0) lineItems.push({ name: 'Shipping', quantity: 1, unit_amount: toBaisa(shippingFee) });
 
   // Look up customer for saved cards
   const user = db.get('SELECT thawani_customer_id FROM users WHERE email = ?', [order.customer_email]);
@@ -136,13 +148,7 @@ router.post('/thawani/session', (req, res) => {
   const payload = JSON.stringify({
     client_reference_id: cleanRef(orderId),
     mode: 'payment',
-    products: [
-      {
-        name: 'Lavish Fashion order',
-        quantity: 1,
-        unit_amount: Math.max(1, Math.round(total * 1000)),
-      },
-    ],
+    products: lineItems,
     success_url: successUrl,
     cancel_url: cancelUrl,
     customer_id: customerId, // Include if exists

@@ -69,7 +69,7 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { items = [], shippingAddress = '', customerEmail = '', customerPhone = '', id: clientOrderId, couponCode } = req.body || {};
+  const { items = [], shippingAddress = '', customerEmail = '', customerPhone = '', id: clientOrderId, couponCode, shippingOption = 'standard' } = req.body || {};
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Items are required' });
   }
@@ -124,7 +124,6 @@ router.post('/', (req, res) => {
       });
     });
     const subtotal = Object.values(vendorReceipts).reduce((sum, v) => sum + v.subtotal, 0);
-    let total = subtotal;
     let discountAmount = 0;
 
     if (couponCode) {
@@ -137,17 +136,26 @@ router.post('/', (req, res) => {
             discountAmount = coupon.discount_value;
           }
           discountAmount = Math.min(discountAmount, subtotal);
-          total = subtotal - discountAmount;
         }
       }
     }
 
+    // Server-authoritative totals: subtotal - discount, then tax + shipping, so
+    // the stored order.total (and the Thawani charge) matches what the app shows.
+    const round3 = (n) => Math.round(n * 1000) / 1000;
+    const TAX_RATE = 0.05;
+    const SHIPPING_FEES = { standard: 1.5, express: 3.5 };
+    const discountedSubtotal = round3(subtotal - discountAmount);
+    const taxAmount = round3(discountedSubtotal * TAX_RATE);
+    const shippingFee = SHIPPING_FEES[shippingOption] ?? SHIPPING_FEES.standard;
+    const total = round3(discountedSubtotal + taxAmount + shippingFee);
+
     try {
       // Create Order
       db.run(
-        `INSERT INTO orders (id, customer_email, customer_phone, shipping_address, total, payment_status, status, created_at, coupon_code, discount_amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [orderId, customerEmail, customerPhone, shippingAddress, total, 'initiated', 'pending', now, couponCode || null, discountAmount],
+        `INSERT INTO orders (id, customer_email, customer_phone, shipping_address, total, payment_status, status, created_at, coupon_code, discount_amount, shipping_fee, tax_amount, shipping_option)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [orderId, customerEmail, customerPhone, shippingAddress, total, 'initiated', 'pending', now, couponCode || null, discountAmount, shippingFee, taxAmount, shippingOption],
       );
 
       // Create Order Items and Decrement Stock
@@ -170,6 +178,9 @@ router.post('/', (req, res) => {
           shippingAddress,
           total,
           discountAmount,
+          taxAmount,
+          shippingFee,
+          shippingOption,
           couponCode,
           paymentStatus: 'initiated',
           status: 'pending',

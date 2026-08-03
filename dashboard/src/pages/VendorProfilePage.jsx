@@ -1,9 +1,10 @@
 import { useParams, Navigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, Plus, Edit, Camera, Save, X } from 'lucide-react';
 import { useApiClient } from '../lib/api.js';
-import { validateImage, IMAGE_SPECS } from '../lib/images.js';
+import { IMAGE_SPECS } from '../lib/images.js';
+import { useImageCropper } from '../components/ImageCropper.jsx';
 import { formatCurrency, formatDateTime, weeklyBuckets } from '../lib/formatters.jsx';
 import { StatusPill } from '../components/StatusPill.jsx';
 import { StatCard } from '../components/StatCard.jsx';
@@ -42,15 +43,17 @@ export function VendorProfilePage() {
     setShowEditModal(true);
   };
 
+  const { cropFile, cropperModal } = useImageCropper();
+
   const handleLogoSelect = async (file) => {
     if (!file) return;
     setImageError('');
     try {
-      await validateImage(file, { ...IMAGE_SPECS.logo, label: 'Logo' });
-      setPendingLogo(file);
-      setLogoPreview(URL.createObjectURL(file));
+      const cropped = await cropFile(file, { aspect: IMAGE_SPECS.logo.aspect, cropShape: 'round', label: 'Logo' });
+      setPendingLogo(cropped);
+      setLogoPreview(URL.createObjectURL(cropped));
     } catch (err) {
-      setImageError(err.message);
+      if (err.message !== 'cancelled') setImageError(err.message);
     }
   };
 
@@ -58,11 +61,11 @@ export function VendorProfilePage() {
     if (!file) return;
     setImageError('');
     try {
-      await validateImage(file, { ...IMAGE_SPECS.cover, label: 'Header image' });
-      setPendingCover(file);
-      setCoverPreview(URL.createObjectURL(file));
+      const cropped = await cropFile(file, { aspect: IMAGE_SPECS.cover.aspect, cropShape: 'rect', label: 'Header image' });
+      setPendingCover(cropped);
+      setCoverPreview(URL.createObjectURL(cropped));
     } catch (err) {
-      setImageError(err.message);
+      if (err.message !== 'cancelled') setImageError(err.message);
     }
   };
 
@@ -125,7 +128,7 @@ export function VendorProfilePage() {
 
   const data = profile.data || { vendor: {}, stats: {}, products: [], receipts: [], payouts: [] };
 
-  const weekly = useMemo(() => weeklyBuckets(data.receipts), [data.receipts]);
+  const weekly = weeklyBuckets(data.receipts);
   const weeklyMax = Math.max(...weekly.map((w) => Number(w.total || 0)), 1);
 
   const createPayout = useMutation({
@@ -446,6 +449,7 @@ export function VendorProfilePage() {
           </div>
         </div>
       </div>
+      {cropperModal}
     </div>
   );
 }

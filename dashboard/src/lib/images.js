@@ -33,6 +33,7 @@ export const IMAGE_SPECS = {
   logo: {
     label: 'Logo',
     aspect: 1,
+    cropShape: 'round',
     aspectTolerance: 0.1,
     maxMB: 5,
     minWidth: 400,
@@ -128,4 +129,27 @@ export async function validateImage(file, options = {}) {
   }
 
   return { width, height };
+}
+
+// Produce a cropped image File from a source object-URL and a pixel crop rect
+// (as returned by react-easy-crop's onCropComplete). Output is a JPEG File.
+export async function getCroppedFile(imageSrc, cropPixels, fileName = 'image.jpg', mimeType = 'image/jpeg') {
+  const image = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = imageSrc;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(cropPixels.width));
+  canvas.height = Math.max(1, Math.round(cropPixels.height));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(
+    image,
+    cropPixels.x, cropPixels.y, cropPixels.width, cropPixels.height,
+    0, 0, canvas.width, canvas.height,
+  );
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, mimeType, 0.92));
+  const safeName = fileName.replace(/\.[^.]+$/, '') + '.jpg';
+  return new File([blob], safeName, { type: mimeType });
 }
