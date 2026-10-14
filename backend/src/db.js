@@ -181,8 +181,8 @@ db.run = (sql) => db.exec(sql);
     );
   `);
 
-  seedIfNeeded();
   ensureColumns();
+  seedIfNeeded();
   normalizeMedia();
 }
 
