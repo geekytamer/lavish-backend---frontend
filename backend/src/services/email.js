@@ -21,7 +21,7 @@ async function sendOrderConfirmation({ email, orderId, total, items, shippingAdd
 
     try {
         await resend.emails.send({
-            from: 'Lavish Fashion <orders@lavish.one>',
+            from: 'Lavish Fashion <orders@lavishlook.app>',
             to: email,
             subject: `Order Confirmed: #${orderId.slice(0, 8).toUpperCase()}`,
             html: `
@@ -64,7 +64,7 @@ async function sendSaleNotification({ vendorEmail, vendorName, orderId, items })
 
     try {
         await resend.emails.send({
-            from: 'Lavish Marketplace <sales@lavish.one>',
+            from: 'Lavish Marketplace <sales@lavishlook.app>',
             to: vendorEmail,
             subject: `New Sale: Order #${orderId.slice(0, 8).toUpperCase()}`,
             html: `
@@ -96,7 +96,7 @@ async function sendStatusUpdate({ email, orderId, status }) {
 
     try {
         await resend.emails.send({
-            from: 'Lavish Fashion <status@lavish.one>',
+            from: 'Lavish Fashion <status@lavishlook.app>',
             to: email,
             subject: `Order Update: #${orderId.slice(0, 8).toUpperCase()}`,
             html: `
